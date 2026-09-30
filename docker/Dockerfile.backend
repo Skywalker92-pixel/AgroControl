@@ -1,0 +1,51 @@
+# ==============================================================================
+# AGROCONTROL PRO - DOCKERFILE BACKEND (Node.js 20 / NestJS)
+# ==============================================================================
+
+# Etapa 1: Build de la aplicación
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Instalar dependencias necesarias para compilar módulos nativos y motor Prisma
+RUN apk add --no-cache libc6-compat openssl
+
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci
+RUN npx prisma generate
+
+COPY . .
+
+# Compilación de la aplicación NestJS
+RUN npm run build
+
+# Etapa 2: Entorno de producción ligero
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Instalar dependencias de runtime para el motor Prisma en Alpine
+RUN apk add --no-cache libc6-compat openssl
+
+ENV NODE_ENV=production
+
+
+# Crear usuario sin privilegios para seguridad
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nestjs
+
+COPY package*.json ./
+COPY prisma ./prisma/
+RUN npm ci --only=production && npx prisma generate && npm cache clean --force
+
+COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+
+
+USER nestjs
+
+EXPOSE 3000
+
+CMD ["node", "dist/main"]

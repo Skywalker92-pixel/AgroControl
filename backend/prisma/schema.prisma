@@ -1,0 +1,457 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auditoria {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entidad        String   @db.VarChar(50)
+  registro_id    String   @db.Uuid
+  accion         String   @db.VarChar(20)
+  valor_anterior Json?
+  valor_nuevo    Json?
+  usuario_id     String?  @db.Uuid
+  dispositivo_id String?  @db.Uuid
+  ip_origen      String?  @db.VarChar(45)
+  fecha          DateTime @default(now()) @db.Timestamptz(6)
+  usuario        usuario? @relation(fields: [usuario_id], references: [id], onUpdate: NoAction)
+
+  @@index([entidad, registro_id], map: "ix_auditoria_entidad_registro")
+  @@index([fecha], map: "ix_auditoria_fecha")
+  @@index([usuario_id], map: "ix_auditoria_usuario")
+}
+
+model categoria {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo         String     @unique @db.VarChar(30)
+  nombre         String     @db.VarChar(100)
+  descripcion    String?
+  activo         Boolean    @default(true)
+  creado_en      DateTime   @default(now()) @db.Timestamptz(6)
+  actualizado_en DateTime   @default(now()) @db.Timestamptz(6)
+  producto       producto[]
+
+  @@index([actualizado_en], map: "ix_categoria_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model cliente {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo_documento   String       @default("DNI") @db.VarChar(10)
+  numero_documento String       @db.VarChar(20)
+  razon_social     String       @db.VarChar(200)
+  direccion        String?      @db.VarChar(250)
+  telefono         String?      @db.VarChar(30)
+  email            String?      @db.VarChar(100)
+  lista_precio_id  String       @db.Uuid
+  activo           Boolean      @default(true)
+  creado_en        DateTime     @default(now()) @db.Timestamptz(6)
+  actualizado_en   DateTime     @default(now()) @db.Timestamptz(6)
+  lista_precio     lista_precio @relation(fields: [lista_precio_id], references: [id], onUpdate: NoAction)
+  proforma         proforma[]
+
+  @@unique([tipo_documento, numero_documento], map: "uq_cliente_doc")
+  @@index([numero_documento], map: "ix_cliente_doc")
+  @@index([lista_precio_id], map: "ix_cliente_lista_precio")
+  @@index([actualizado_en], map: "ix_cliente_actualizado_en")
+}
+
+model lista_precio {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo          String            @unique @db.VarChar(30)
+  nombre          String            @db.VarChar(100)
+  descripcion     String?
+  activo          Boolean           @default(true)
+  creado_en       DateTime          @default(now()) @db.Timestamptz(6)
+  actualizado_en  DateTime          @default(now()) @db.Timestamptz(6)
+  cliente         cliente[]
+  precio_producto precio_producto[]
+  proforma        proforma[]
+
+  @@index([actualizado_en], map: "ix_lista_precio_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model movimiento_kardex {
+  id                      String                   @id @db.Uuid
+  producto_id             String                   @db.Uuid
+  ubicacion_id            String                   @db.Uuid
+  tipo                    String                   @db.VarChar(30)
+  cantidad_base           Decimal                  @db.Decimal(14, 3)
+  costo_unitario          Decimal?                 @db.Decimal(14, 4)
+  documento_tipo          String?                  @db.VarChar(30)
+  documento_id            String?                  @db.Uuid
+  movimiento_ref_id       String?                  @db.Uuid
+  lote_id                 String?                  @db.Uuid
+  motivo                  String?                  @db.VarChar(250)
+  usuario_id              String                   @db.Uuid
+  dispositivo_id          String?                  @db.Uuid
+  fecha_operacion         DateTime                 @db.Timestamptz(6)
+  fecha_registro          DateTime                 @default(now()) @db.Timestamptz(6)
+  movimiento_kardex       movimiento_kardex?       @relation("movimiento_kardexTomovimiento_kardex", fields: [movimiento_ref_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  other_movimiento_kardex movimiento_kardex[]      @relation("movimiento_kardexTomovimiento_kardex")
+  producto                producto                 @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+  ubicacion               ubicacion                @relation(fields: [ubicacion_id], references: [id], onUpdate: NoAction)
+  usuario                 usuario                  @relation(fields: [usuario_id], references: [id], onUpdate: NoAction)
+  operacion_sincronizada  operacion_sincronizada[]
+
+  @@index([documento_tipo, documento_id], map: "ix_kardex_doc")
+  @@index([producto_id, ubicacion_id, fecha_operacion], map: "ix_kardex_prod_ubic_fecha")
+  @@index([movimiento_ref_id], map: "ix_kardex_ref")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model precio_producto {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lista_precio_id String       @db.Uuid
+  producto_id     String       @db.Uuid
+  precio          Decimal      @db.Decimal(14, 4)
+  creado_en       DateTime     @default(now()) @db.Timestamptz(6)
+  actualizado_en  DateTime     @default(now()) @db.Timestamptz(6)
+  lista_precio    lista_precio @relation(fields: [lista_precio_id], references: [id], onUpdate: NoAction)
+  producto        producto     @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+
+  @@unique([lista_precio_id, producto_id], map: "uq_lista_producto")
+  @@index([lista_precio_id], map: "ix_precio_producto_lista")
+  @@index([producto_id], map: "ix_precio_producto_prod")
+  @@index([actualizado_en], map: "ix_precio_producto_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model presentacion {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  producto_id         String                @db.Uuid
+  nombre              String                @db.VarChar(50)
+  factor              Decimal               @db.Decimal(12, 3)
+  activo              Boolean               @default(true)
+  creado_en           DateTime              @default(now()) @db.Timestamptz(6)
+  actualizado_en      DateTime              @default(now()) @db.Timestamptz(6)
+  carga_detalle       carga_detalle[]
+  liquidacion_detalle liquidacion_detalle[]
+  producto            producto              @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+  proforma_detalle    proforma_detalle[]
+
+  @@unique([producto_id, nombre], map: "uq_producto_presentacion")
+  @@index([producto_id], map: "ix_presentacion_producto")
+  @@index([actualizado_en], map: "ix_presentacion_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model producto {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo_interno      String                @unique @db.VarChar(30)
+  codigo_barras       String?               @db.VarChar(50)
+  nombre              String                @db.VarChar(150)
+  descripcion         String?
+  categoria_id        String                @db.Uuid
+  unidad_base         String                @db.VarChar(20)
+  activo              Boolean               @default(true)
+  creado_en           DateTime              @default(now()) @db.Timestamptz(6)
+  actualizado_en      DateTime              @default(now()) @db.Timestamptz(6)
+  carga_detalle       carga_detalle[]
+  liquidacion_detalle liquidacion_detalle[]
+  movimiento_kardex   movimiento_kardex[]
+  precio_producto     precio_producto[]
+  presentacion        presentacion[]
+  categoria           categoria             @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  proforma_detalle    proforma_detalle[]
+  stock_saldo         stock_saldo[]
+
+  @@index([activo], map: "ix_producto_activo")
+  @@index([categoria_id], map: "ix_producto_categoria")
+  @@index([actualizado_en], map: "ix_producto_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model proforma {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  numero           String             @unique @db.VarChar(20)
+  cliente_id       String             @db.Uuid
+  lista_precio_id  String             @db.Uuid
+  ubicacion_id     String             @db.Uuid
+  estado           String             @db.VarChar(15)
+  subtotal         Decimal            @default(0) @db.Decimal(14, 4)
+  igv              Decimal            @default(0) @db.Decimal(14, 4)
+  total            Decimal            @default(0) @db.Decimal(14, 4)
+  observaciones    String?
+  creado_por       String             @db.Uuid
+  creado_en        DateTime           @default(now()) @db.Timestamptz(6)
+  actualizado_en   DateTime           @default(now()) @db.Timestamptz(6)
+  cliente          cliente            @relation(fields: [cliente_id], references: [id], onUpdate: NoAction)
+  usuario          usuario            @relation(fields: [creado_por], references: [id], onUpdate: NoAction)
+  lista_precio     lista_precio       @relation(fields: [lista_precio_id], references: [id], onUpdate: NoAction)
+  ubicacion        ubicacion          @relation(fields: [ubicacion_id], references: [id], onUpdate: NoAction)
+  proforma_detalle proforma_detalle[]
+
+  @@index([cliente_id], map: "ix_proforma_cliente")
+  @@index([estado], map: "ix_proforma_estado")
+  @@index([ubicacion_id], map: "ix_proforma_ubicacion")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model proforma_detalle {
+  id                        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proforma_id               String        @db.Uuid
+  producto_id               String        @db.Uuid
+  presentacion_id           String?       @db.Uuid
+  cantidad_presentacion     Decimal       @default(0) @db.Decimal(12, 3)
+  cantidad_unidades_sueltas Decimal       @default(0) @db.Decimal(12, 3)
+  cantidad_total_base       Decimal       @db.Decimal(14, 3)
+  precio_unitario_base      Decimal       @db.Decimal(14, 4)
+  subtotal                  Decimal       @db.Decimal(14, 4)
+  presentacion              presentacion? @relation(fields: [presentacion_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  producto                  producto      @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+  proforma                  proforma      @relation(fields: [proforma_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([producto_id], map: "ix_proforma_detalle_producto")
+  @@index([proforma_id], map: "ix_proforma_detalle_proforma")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model stock_saldo {
+  producto_id         String    @db.Uuid
+  ubicacion_id        String    @db.Uuid
+  cantidad_fisica     Decimal   @default(0) @db.Decimal(14, 3)
+  cantidad_reservada  Decimal   @default(0) @db.Decimal(14, 3)
+  cantidad_disponible Decimal?  @default(dbgenerated("(cantidad_fisica - cantidad_reservada)")) @db.Decimal(14, 3)
+  actualizado_en      DateTime  @default(now()) @db.Timestamptz(6)
+  producto            producto  @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+  ubicacion           ubicacion @relation(fields: [ubicacion_id], references: [id], onUpdate: NoAction)
+
+  @@id([producto_id, ubicacion_id])
+  @@index([ubicacion_id], map: "ix_stock_saldo_ubicacion")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ubicacion {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo                String               @db.VarChar(15)
+  padre_id            String?              @db.Uuid
+  codigo              String               @unique @db.VarChar(30)
+  nombre              String               @db.VarChar(100)
+  vehiculo_id         String?              @db.Uuid
+  trabajador_id       String?              @db.Uuid
+  activo              Boolean              @default(true)
+  creado_en           DateTime             @default(now()) @db.Timestamptz(6)
+  actualizado_en      DateTime             @default(now()) @db.Timestamptz(6)
+  cargas_origen       carga_distribucion[] @relation("carga_origen")
+  cargas_bodega_movil carga_distribucion[] @relation("carga_bodega_movil")
+  movimiento_kardex   movimiento_kardex[]
+  proforma            proforma[]
+  stock_saldo         stock_saldo[]
+  trabajador          usuario?             @relation("ubicacion_trabajador", fields: [trabajador_id], references: [id], onUpdate: NoAction, map: "fk_ubicacion_trabajador")
+  vehiculo            vehiculo?            @relation(fields: [vehiculo_id], references: [id], onUpdate: NoAction, map: "fk_ubicacion_vehiculo")
+  ubicacion           ubicacion?           @relation("ubicacionToubicacion", fields: [padre_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  other_ubicacion     ubicacion[]          @relation("ubicacionToubicacion")
+
+  @@index([padre_id], map: "ix_ubicacion_padre")
+  @@index([tipo], map: "ix_ubicacion_tipo")
+  @@index([vehiculo_id], map: "ix_ubicacion_vehiculo")
+  @@index([trabajador_id], map: "ix_ubicacion_trabajador")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model usuario {
+  id                                                                          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username                                                                    String                   @unique @db.VarChar(50)
+  password_hash                                                               String                   @db.VarChar(255)
+  nombre_completo                                                             String                   @db.VarChar(150)
+  email                                                                       String?                  @db.VarChar(100)
+  rol                                                                         String                   @db.VarChar(30)
+  activo                                                                      Boolean                  @default(true)
+  creado_en                                                                   DateTime                 @default(now()) @db.Timestamptz(6)
+  actualizado_en                                                              DateTime                 @default(now()) @db.Timestamptz(6)
+  auditoria                                                                   auditoria[]
+  cargas_creadas                                                              carga_distribucion[]     @relation("carga_creador")
+  cargas_despachadas                                                          carga_distribucion[]     @relation("carga_despachador")
+  cargas_asignadas                                                            carga_distribucion[]     @relation("carga_trabajador")
+  dispositivo_movil                                                           dispositivo_movil[]
+  liquidaciones_realizadas                                                    liquidacion[]            @relation("usuario_liquidador")
+  movimiento_kardex                                                           movimiento_kardex[]
+  operacion_sincronizada                                                      operacion_sincronizada[]
+  operacion_sincronizada_operacion_sincronizada_usuario_resolutor_idTousuario operacion_sincronizada[] @relation("operacion_sincronizada_usuario_resolutor_idTousuario")
+  proforma                                                                    proforma[]
+  ubicaciones_asignadas                                                       ubicacion[]              @relation("ubicacion_trabajador")
+  vehiculos_habituales                                                        vehiculo[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehiculo {
+  id                    String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  placa                 String               @unique(map: "ux_vehiculo_placa") @db.VarChar(20)
+  marca                 String?              @db.VarChar(50)
+  modelo                String?              @db.VarChar(50)
+  tipo_vehiculo         String?              @default("CAMIONETA") @db.VarChar(50)
+  capacidad_kg          Decimal?             @db.Decimal(12, 2)
+  capacidad_volumen     Decimal?             @db.Decimal(12, 2)
+  conductor_habitual_id String?              @db.Uuid
+  activo                Boolean              @default(true)
+  observaciones         String?
+  creado_en             DateTime             @default(now()) @db.Timestamptz(6)
+  actualizado_en        DateTime             @default(now()) @db.Timestamptz(6)
+  carga_distribucion    carga_distribucion[]
+  ubicacion             ubicacion[]
+  conductor_habitual    usuario?             @relation(fields: [conductor_habitual_id], references: [id], onUpdate: NoAction)
+
+  @@index([activo], map: "ix_vehiculo_activo")
+  @@index([conductor_habitual_id], map: "ix_vehiculo_conductor")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model carga_distribucion {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo                 String                   @unique @db.VarChar(30)
+  almacen_origen_id      String                   @db.Uuid
+  vehiculo_id            String                   @db.Uuid
+  trabajador_id          String                   @db.Uuid
+  bodega_movil_id        String                   @db.Uuid
+  estado                 String                   @default("PENDIENTE") @db.VarChar(20)
+  fecha_salida           DateTime                 @default(now()) @db.Timestamptz(6)
+  fecha_cierre           DateTime?                @db.Timestamptz(6)
+  observaciones          String?
+  creado_por             String                   @db.Uuid
+  despachado_por         String?                  @db.Uuid
+  creado_en              DateTime                 @default(now()) @db.Timestamptz(6)
+  actualizado_en         DateTime                 @default(now()) @db.Timestamptz(6)
+  carga_detalle          carga_detalle[]
+  almacen_origen         ubicacion                @relation("carga_origen", fields: [almacen_origen_id], references: [id], onUpdate: NoAction)
+  bodega_movil           ubicacion                @relation("carga_bodega_movil", fields: [bodega_movil_id], references: [id], onUpdate: NoAction)
+  usuario_creador        usuario                  @relation("carga_creador", fields: [creado_por], references: [id], onUpdate: NoAction)
+  usuario_despachador    usuario?                 @relation("carga_despachador", fields: [despachado_por], references: [id], onUpdate: NoAction)
+  trabajador             usuario                  @relation("carga_trabajador", fields: [trabajador_id], references: [id], onUpdate: NoAction)
+  vehiculo               vehiculo                 @relation(fields: [vehiculo_id], references: [id], onUpdate: NoAction)
+  liquidacion            liquidacion?
+  operacion_sincronizada operacion_sincronizada[]
+
+  @@index([estado], map: "ix_carga_estado")
+  @@index([vehiculo_id], map: "ix_carga_vehiculo")
+  @@index([trabajador_id], map: "ix_carga_trabajador")
+  @@index([fecha_salida], map: "ix_carga_fecha_salida")
+  @@index([bodega_movil_id], map: "ix_carga_bodega_movil")
+  @@index([actualizado_en], map: "ix_carga_distribucion_actualizado_en")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model carga_detalle {
+  id                        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  carga_distribucion_id     String             @db.Uuid
+  producto_id               String             @db.Uuid
+  presentacion_id           String?            @db.Uuid
+  cantidad_presentacion     Decimal            @default(0) @db.Decimal(12, 3)
+  cantidad_unidades_sueltas Decimal            @default(0) @db.Decimal(12, 3)
+  cantidad_total_base       Decimal            @db.Decimal(14, 3)
+  observaciones             String?
+  carga_distribucion        carga_distribucion @relation(fields: [carga_distribucion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  presentacion              presentacion?      @relation(fields: [presentacion_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  producto                  producto           @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+
+  @@index([carga_distribucion_id], map: "ix_carga_detalle_carga")
+  @@index([producto_id], map: "ix_carga_detalle_producto")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model liquidacion {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo                String                @unique @db.VarChar(30)
+  carga_distribucion_id String                @unique @db.Uuid
+  fecha_liquidacion     DateTime              @default(now()) @db.Timestamptz(6)
+  usuario_liquidador_id String                @db.Uuid
+  total_vendido         Decimal               @default(0) @db.Decimal(14, 2)
+  total_cobrado         Decimal               @default(0) @db.Decimal(14, 2)
+  diferencia_dinero     Decimal               @default(0) @db.Decimal(14, 2)
+  estado                String                @db.VarChar(20)
+  observaciones         String?
+  creado_en             DateTime              @default(now()) @db.Timestamptz(6)
+  actualizado_en        DateTime              @default(now()) @db.Timestamptz(6)
+  carga_distribucion    carga_distribucion    @relation(fields: [carga_distribucion_id], references: [id], onUpdate: NoAction)
+  usuario_liquidador    usuario               @relation("usuario_liquidador", fields: [usuario_liquidador_id], references: [id], onUpdate: NoAction)
+  liquidacion_detalle   liquidacion_detalle[]
+
+  @@index([carga_distribucion_id], map: "ix_liquidacion_carga")
+  @@index([estado], map: "ix_liquidacion_estado")
+  @@index([fecha_liquidacion], map: "ix_liquidacion_fecha")
+  @@index([usuario_liquidador_id], map: "ix_liquidacion_usuario")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model liquidacion_detalle {
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  liquidacion_id           String        @db.Uuid
+  producto_id              String        @db.Uuid
+  presentacion_id          String?       @db.Uuid
+  cantidad_cargada         Decimal       @db.Decimal(14, 3)
+  cantidad_vendida         Decimal       @db.Decimal(14, 3)
+  cantidad_retornada       Decimal       @db.Decimal(14, 3)
+  diferencia               Decimal       @default(0) @db.Decimal(14, 3)
+  justificacion            String?
+  precio_unitario_promedio Decimal       @default(0) @db.Decimal(14, 4)
+  subtotal_vendido         Decimal       @default(0) @db.Decimal(14, 2)
+  liquidacion              liquidacion   @relation(fields: [liquidacion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  presentacion             presentacion? @relation(fields: [presentacion_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  producto                 producto      @relation(fields: [producto_id], references: [id], onUpdate: NoAction)
+
+  @@index([liquidacion_id], map: "ix_liq_detalle_liq")
+  @@index([producto_id], map: "ix_liq_detalle_prod")
+}
+
+model dispositivo_movil {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo_dispositivo     String                   @unique @db.VarChar(50)
+  modelo                 String?                  @db.VarChar(100)
+  sistema_operativo      String?                  @default("Android") @db.VarChar(50)
+  version_app            String?                  @default("1.0.0") @db.VarChar(20)
+  trabajador_id          String?                  @db.Uuid
+  activo                 Boolean                  @default(true)
+  autorizado             Boolean                  @default(true)
+  ultima_sincronizacion  DateTime?                @db.Timestamptz(6)
+  creado_en              DateTime                 @default(now()) @db.Timestamptz(6)
+  actualizado_en         DateTime                 @default(now()) @db.Timestamptz(6)
+  usuario                usuario?                 @relation(fields: [trabajador_id], references: [id], onUpdate: NoAction)
+  operacion_sincronizada operacion_sincronizada[]
+
+  @@index([activo, autorizado], map: "ix_dispositivo_activo")
+  @@index([actualizado_en], map: "ix_dispositivo_actualizado_en")
+  @@index([codigo_dispositivo], map: "ix_dispositivo_codigo")
+  @@index([trabajador_id], map: "ix_dispositivo_trabajador")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model operacion_sincronizada {
+  id                                                           String              @id @db.Uuid
+  dispositivo_id                                               String              @db.Uuid
+  usuario_id                                                   String              @db.Uuid
+  carga_distribucion_id                                        String?             @db.Uuid
+  tipo_operacion                                               String              @db.VarChar(30)
+  estado_sync                                                  String              @default("RECIBIDA") @db.VarChar(30)
+  datos_operacion                                              Json
+  motivo_observacion                                           String?
+  fecha_operacion                                              DateTime            @db.Timestamptz(6)
+  fecha_registro                                               DateTime            @default(now()) @db.Timestamptz(6)
+  ip_origen                                                    String?             @db.VarChar(45)
+  creado_en                                                    DateTime            @default(now()) @db.Timestamptz(6)
+  actualizado_en                                               DateTime            @default(now()) @db.Timestamptz(6)
+  usuario_resolutor_id                                         String?             @db.Uuid
+  fecha_resolucion                                             DateTime?           @db.Timestamptz(6)
+  nota_resolucion                                              String?
+  movimiento_ajuste_id                                         String?             @db.Uuid
+  carga_distribucion                                           carga_distribucion? @relation(fields: [carga_distribucion_id], references: [id], onUpdate: NoAction)
+  dispositivo_movil                                            dispositivo_movil   @relation(fields: [dispositivo_id], references: [id], onUpdate: NoAction)
+  movimiento_kardex                                            movimiento_kardex?  @relation(fields: [movimiento_ajuste_id], references: [id], onUpdate: NoAction)
+  usuario                                                      usuario             @relation(fields: [usuario_id], references: [id], onUpdate: NoAction)
+  usuario_operacion_sincronizada_usuario_resolutor_idTousuario usuario?            @relation("operacion_sincronizada_usuario_resolutor_idTousuario", fields: [usuario_resolutor_id], references: [id], onUpdate: NoAction)
+
+  @@index([actualizado_en], map: "ix_operacion_sync_actualizado_en")
+  @@index([carga_distribucion_id], map: "ix_operacion_sync_carga")
+  @@index([dispositivo_id], map: "ix_operacion_sync_dispositivo")
+  @@index([estado_sync], map: "ix_operacion_sync_estado")
+  @@index([fecha_operacion], map: "ix_operacion_sync_fecha_op")
+  @@index([fecha_registro], map: "ix_operacion_sync_fecha_reg")
+  @@index([usuario_id], map: "ix_operacion_sync_usuario")
+  @@index([fecha_resolucion], map: "ix_operacion_sync_fecha_resolucion")
+  @@index([usuario_resolutor_id], map: "ix_operacion_sync_resolutor")
+}

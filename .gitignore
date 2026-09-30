@@ -1,0 +1,75 @@
+# ==============================================================================
+# AGROCONTROL PRO - .gitignore
+# ==============================================================================
+
+# ── Dependencias de paquetes ──────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Entornos y variables sensibles (NUNCA subir al repositorio) ───────────────
+.env
+.env.local
+.env.*.local
+*.env
+!*.env.example          # La plantilla SÍ se incluye
+
+# ── Certificados y claves privadas ────────────────────────────────────────────
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+keystore.jks
+google-services.json    # Firebase / Play Store (si se agrega en el futuro)
+
+# ── Compilación y artefactos de build ─────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+*.apk                   # APK generados de la app móvil
+*.aab
+
+# ── Base de datos local, volúmenes y respaldos ────────────────────────────────
+backups/                # Los backups viven fuera del repo (regla 3-2-1)
+*.dump
+*.sql.gz
+pgdata/
+.postgres/
+database/data/
+
+# ── Logs del sistema ──────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ── Cobertura de pruebas ──────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Caché de herramientas ─────────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+.eslintcache
+
+# ── Configuraciones de IDE y Sistema Operativo ────────────────────────────────
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Overrides de Docker para desarrollo individual ────────────────────────────
+docker-compose.override.yml
+docker-compose.local.yml
