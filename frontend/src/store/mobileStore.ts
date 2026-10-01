@@ -9,17 +9,16 @@ import {
   DispositivoMovil,
 } from '../types';
 import { syncApi, clientesApi } from '../api/services';
-
-const STORAGE_KEYS = {
-  DEVICE_ID: 'agrocontrol_movil_device_id',
-  DEVICE_CODE: 'agrocontrol_movil_device_code',
-  DEVICE_INFO: 'agrocontrol_movil_device_info',
-  CATALOGO: 'agrocontrol_movil_catalogo',
-  CLIENTES: 'agrocontrol_movil_clientes',
-  CARGA_ACTIVA: 'agrocontrol_movil_carga_activa',
-  COLA_OPERACIONES: 'agrocontrol_movil_cola_operaciones',
-  ULTIMA_SYNC: 'agrocontrol_movil_ultima_sync',
-};
+import {
+  cargarEstadoOfflineCompleto,
+  guardarVentaAtomicaIndexedDB,
+  guardarPullIndexedDB,
+  actualizarColaIndexedDB,
+  limpiarSincronizadasIndexedDB,
+  guardarClienteIndexedDB,
+  guardarTerminalInfoIndexedDB,
+  migrarDesdeLocalStorageSiExiste,
+} from './mobileDb';
 
 // Generador de UUID para clientes sin crypto.randomUUID (compatibilidad amplia)
 export const generarUUID = (): string => {
@@ -48,23 +47,25 @@ interface MobileState {
   cargaActiva: CargaActivaMovil | null;
   ultimaSincronizacion: string | null;
 
-  // Cola de Operaciones Offline
+  // Cola de Operaciones Offline (operaciones_pendientes_queue en IndexedDB)
   colaOperaciones: OperacionSyncLocal[];
 
-  // Estados de Conectividad y Sincronización
+  // Estados de Conectividad, Hidratación y Sincronización
   isOnline: boolean;
   isSyncing: boolean;
   syncError: string | null;
+  isLoadedFromDb: boolean;
 
   // Acciones
   setIsOnline: (online: boolean) => void;
+  cargarDesdeIndexedDB: () => Promise<void>;
   inicializarTerminal: () => Promise<void>;
   vincularTerminal: (modelo?: string, trabajadorId?: string) => Promise<DispositivoMovil>;
   ejecutarPull: (forzarCompleto?: boolean) => Promise<void>;
   ejecutarPush: () => Promise<{ enviadas: number; aplicadas: number; observadas: number }>;
   sincronizarTodo: () => Promise<void>;
 
-  // Registro de Operaciones Locales (Nunca pierdas una venta)
+  // Registro de Operaciones Locales con Salvaguarda Atómica en IndexedDB
   registrarVentaLocal: (params: {
     clienteId: string;
     clienteNombre: string;
@@ -81,93 +82,82 @@ interface MobileState {
     telefono?: string;
   }) => Promise<Cliente>;
 
-  limpiarHistorialSincronizado: () => void;
+  limpiarHistorialSincronizado: () => Promise<void>;
 }
 
 export const useMobileStore = create<MobileState>((set, get) => {
-  // Inicializar estado persistente desde localStorage
+  // Inicialización de código de dispositivo sincronizado en fallback
   const initCodigoDispositivo = (() => {
-    let code = localStorage.getItem(STORAGE_KEYS.DEVICE_CODE);
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return 'TERM-ANDRO-1001';
+    }
+    let code = localStorage.getItem('agrocontrol_movil_device_code');
     if (!code) {
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       code = `TERM-ANDRO-${randomSuffix}`;
-      localStorage.setItem(STORAGE_KEYS.DEVICE_CODE, code);
+      localStorage.setItem('agrocontrol_movil_device_code', code);
     }
     return code;
   })();
 
-  const initDeviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
-  const initDeviceInfo = (() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.DEVICE_INFO);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  })();
-
-  const initClientes = (() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.CLIENTES);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  })();
-
-  const initCatalogo = (() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.CATALOGO);
-      return raw
-        ? JSON.parse(raw)
-        : { categorias: [], productos: [], presentaciones: [], listasPrecios: [] };
-    } catch {
-      return { categorias: [], productos: [], presentaciones: [], listasPrecios: [] };
-    }
-  })();
-
-  const initCargaActiva = (() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.CARGA_ACTIVA);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  })();
-
-  const initCola = (() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.COLA_OPERACIONES);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  })();
-
-  const initUltimaSync = localStorage.getItem(STORAGE_KEYS.ULTIMA_SYNC);
+  const initDeviceId =
+    typeof window !== 'undefined' && window.localStorage
+      ? localStorage.getItem('agrocontrol_movil_device_id')
+      : null;
 
   return {
     codigoDispositivo: initCodigoDispositivo,
     dispositivoId: initDeviceId,
-    dispositivo: initDeviceInfo,
+    dispositivo: null,
 
-    categorias: initCatalogo.categorias,
-    productos: initCatalogo.productos,
-    presentaciones: initCatalogo.presentaciones,
-    listasPrecios: initCatalogo.listasPrecios,
-    clientes: initClientes,
-    cargaActiva: initCargaActiva,
-    ultimaSincronizacion: initUltimaSync,
+    categorias: [],
+    productos: [],
+    presentaciones: [],
+    listasPrecios: [],
+    clientes: [],
+    cargaActiva: null,
+    ultimaSincronizacion: null,
 
-    colaOperaciones: initCola,
+    colaOperaciones: [],
 
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
     isSyncing: false,
     syncError: null,
+    isLoadedFromDb: false,
 
     setIsOnline: (online) => set({ isOnline: online }),
 
+    /**
+     * Hidrata el estado en memoria desde las tablas de IndexedDB
+     */
+    cargarDesdeIndexedDB: async () => {
+      try {
+        await migrarDesdeLocalStorageSiExiste();
+        const estadoDb = await cargarEstadoOfflineCompleto();
+
+        set({
+          categorias: estadoDb.catalogo.categorias || [],
+          productos: estadoDb.catalogo.productos || [],
+          presentaciones: estadoDb.catalogo.presentaciones || [],
+          listasPrecios: estadoDb.catalogo.listasPrecios || [],
+          clientes: estadoDb.clientes || [],
+          cargaActiva: estadoDb.cargaActiva || null,
+          colaOperaciones: estadoDb.colaOperaciones || [],
+          ultimaSincronizacion: estadoDb.ultimaSync || null,
+          dispositivoId: estadoDb.deviceId || get().dispositivoId,
+          codigoDispositivo: estadoDb.deviceCode || get().codigoDispositivo,
+          dispositivo: estadoDb.deviceInfo || get().dispositivo,
+          isLoadedFromDb: true,
+        });
+      } catch (err: any) {
+        console.error('Error al cargar datos desde IndexedDB:', err);
+      }
+    },
+
     inicializarTerminal: async () => {
+      // 1. Cargar datos transaccionales desde IndexedDB
+      await get().cargarDesdeIndexedDB();
+
       const { dispositivoId, vincularTerminal, ejecutarPull, isOnline } = get();
       if (!dispositivoId) {
         try {
@@ -192,15 +182,21 @@ export const useMobileStore = create<MobileState>((set, get) => {
           codigo_dispositivo: codigoDispositivo,
           modelo,
           sistema_operativo: 'Android 14',
-          version_app: '1.0.0',
+          version_app: '1.0.0-rc1',
           trabajador_id: trabajadorId,
           activo: true,
           autorizado: true,
         });
 
         const dev = res.dispositivo;
-        localStorage.setItem(STORAGE_KEYS.DEVICE_ID, dev.id);
-        localStorage.setItem(STORAGE_KEYS.DEVICE_INFO, JSON.stringify(dev));
+
+        // Persistir en IndexedDB y fallback local
+        await guardarTerminalInfoIndexedDB(dev);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('agrocontrol_movil_device_id', dev.id);
+          localStorage.setItem('agrocontrol_movil_device_code', dev.codigo_dispositivo);
+        }
+
         set({ dispositivoId: dev.id, dispositivo: dev });
         return dev;
       } catch (error: any) {
@@ -244,23 +240,22 @@ export const useMobileStore = create<MobileState>((set, get) => {
           ? respuesta.datos.clientes
           : mezclarPorId(get().clientes, respuesta.datos.clientes);
 
-        // Guardar en Storage Local
-        const catalogoGuardar = {
+        const catalogoActualizado = {
           categorias: nuevasCategorias,
           productos: nuevosProductos,
           presentaciones: nuevasPresentaciones,
           listasPrecios: nuevasListas,
         };
-        localStorage.setItem(STORAGE_KEYS.CATALOGO, JSON.stringify(catalogoGuardar));
-        localStorage.setItem(STORAGE_KEYS.CLIENTES, JSON.stringify(nuevosClientes));
-        localStorage.setItem(STORAGE_KEYS.ULTIMA_SYNC, respuesta.timestamp_servidor);
 
-        if (respuesta.datos.carga_activa) {
-          localStorage.setItem(
-            STORAGE_KEYS.CARGA_ACTIVA,
-            JSON.stringify(respuesta.datos.carga_activa),
-          );
-        }
+        const cargaActualizada = respuesta.datos.carga_activa || get().cargaActiva;
+
+        // Guardar de forma transaccional en IndexedDB
+        await guardarPullIndexedDB({
+          catalogo: catalogoActualizado,
+          clientes: nuevosClientes,
+          cargaActiva: cargaActualizada,
+          ultimaSync: respuesta.timestamp_servidor,
+        });
 
         set({
           categorias: nuevasCategorias,
@@ -268,7 +263,7 @@ export const useMobileStore = create<MobileState>((set, get) => {
           presentaciones: nuevasPresentaciones,
           listasPrecios: nuevasListas,
           clientes: nuevosClientes,
-          cargaActiva: respuesta.datos.carga_activa || get().cargaActiva,
+          cargaActiva: cargaActualizada,
           ultimaSincronizacion: respuesta.timestamp_servidor,
           isSyncing: false,
           syncError: null,
@@ -339,7 +334,9 @@ export const useMobileStore = create<MobileState>((set, get) => {
           return op;
         });
 
-        localStorage.setItem(STORAGE_KEYS.COLA_OPERACIONES, JSON.stringify(colaActualizada));
+        // Actualizar cola en IndexedDB (operaciones_pendientes_queue)
+        await actualizarColaIndexedDB(colaActualizada);
+
         set({
           colaOperaciones: colaActualizada,
           isSyncing: false,
@@ -431,11 +428,12 @@ export const useMobileStore = create<MobileState>((set, get) => {
         }),
       };
 
-      // 2. SALVAGUARDA LOCAL: Guardar en cola antes de cualquier intento de red
-      const colaActualizada = [nuevaOperacion, ...colaOperaciones];
+      // 2. SALVAGUARDA LOCAL ATÓMICA EN INDEXEDDB
+      // Escribe la carga actualizada y la nueva operación en operaciones_pendientes_queue
+      // dentro de una única transacción readwrite ACID antes de intentar cualquier sincronización de red.
+      await guardarVentaAtomicaIndexedDB(cargaActualizada, nuevaOperacion);
 
-      localStorage.setItem(STORAGE_KEYS.CARGA_ACTIVA, JSON.stringify(cargaActualizada));
-      localStorage.setItem(STORAGE_KEYS.COLA_OPERACIONES, JSON.stringify(colaActualizada));
+      const colaActualizada = [nuevaOperacion, ...colaOperaciones];
 
       set({
         cargaActiva: cargaActualizada,
@@ -446,7 +444,7 @@ export const useMobileStore = create<MobileState>((set, get) => {
       if (isOnline) {
         setTimeout(() => {
           ejecutarPush().catch((err) => {
-            console.log('Operación guardada localmente. Sincronización diferida:', err.message);
+            console.log('Operación salvaguardada en IndexedDB. Sincronización diferida:', err.message);
           });
         }, 100);
       }
@@ -471,33 +469,39 @@ export const useMobileStore = create<MobileState>((set, get) => {
         activo: true,
       };
 
+      // Guardar en IndexedDB
+      await guardarClienteIndexedDB(nuevoCliente);
+
       const clientesActualizados = [nuevoCliente, ...clientes];
-      localStorage.setItem(STORAGE_KEYS.CLIENTES, JSON.stringify(clientesActualizados));
       set({ clientes: clientesActualizados });
 
       // Si hay conexión, intentar registrar en central en background
       if (get().isOnline) {
         clientesApi.crear(nuevoCliente).catch((err) => {
-          console.warn('Cliente creado localmente, sincronización posterior:', err.message);
+          console.warn('Cliente creado en IndexedDB local, sincronización posterior:', err.message);
         });
       }
 
       return nuevoCliente;
     },
 
-    limpiarHistorialSincronizado: () => {
+    limpiarHistorialSincronizado: async () => {
+      await limpiarSincronizadasIndexedDB();
       const { colaOperaciones } = get();
       const soloPendientesUObservadas = colaOperaciones.filter(
         (op) => op.estado_local !== 'SINCRONIZADA',
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.COLA_OPERACIONES,
-        JSON.stringify(soloPendientesUObservadas),
       );
       set({ colaOperaciones: soloPendientesUObservadas });
     },
   };
 });
+
+// Inicialización asíncrona inmediata al cargar el módulo
+if (typeof window !== 'undefined') {
+  useMobileStore.getState().cargarDesdeIndexedDB().catch((e) => {
+    console.warn('Inicialización de IndexedDB diferida:', e);
+  });
+}
 
 // Helper para mezclar arreglos por propiedad id
 function mezclarPorId<T extends { id: string }>(existentes: T[], nuevos: T[]): T[] {
