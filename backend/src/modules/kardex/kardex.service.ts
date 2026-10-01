@@ -11,6 +11,8 @@ export interface RegistrarMovimientoParams {
   ubicacion_id: string;
   tipo:
     | 'ENTRADA'
+    | 'ENTRADA_COMPRA'
+    | 'INVENTARIO_INICIAL'
     | 'SALIDA'
     | 'TRASLADO_SALIDA'
     | 'TRASLADO_ENTRADA'
