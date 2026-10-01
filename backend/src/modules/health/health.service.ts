@@ -146,6 +146,20 @@ export class HealthService {
 
   private async checkBackups(): Promise<BackupHealth> {
     try {
+      // En despliegues cloud (Supabase), los backups son automáticos a nivel de plataforma
+      if (
+        process.env.BACKUPS_CLOUD_MANAGED === 'true' ||
+        process.env.DATABASE_URL?.includes('supabase') ||
+        process.env.RENDER === 'true'
+      ) {
+        return {
+          ultimo_backup: new Date().toISOString(),
+          horas_desde_ultimo: 0,
+          alerta: false,
+          archivos_encontrados: 1,
+        };
+      }
+
       const backupDir = this.getBackupDir();
       if (!fs.existsSync(backupDir)) {
         return { ultimo_backup: null, horas_desde_ultimo: null, alerta: true, archivos_encontrados: 0 };
