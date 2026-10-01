@@ -60,18 +60,26 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: 5. Generar Prisma Client y Compilar Backend
+      - name: 5. Generar Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: 6. Ejecutar Linter del Backend
+        working-directory: backend
+        run: npm run lint
+
+      - name: 7. Compilar Backend
         working-directory: backend
         run: npm run build
 
-      - name: 6. Ejecutar Batería Completa de Pruebas E2E del Backend
+      - name: 8. Ejecutar Batería Completa de Pruebas E2E del Backend
         working-directory: backend
         run: npm run test:e2e
 
-      - name: 7. Instalar dependencias del Frontend
+      - name: 9. Instalar dependencias del Frontend
         working-directory: frontend
         run: npm ci
 
-      - name: 8. Compilar Frontend (TypeScript + Vite)
+      - name: 10. Compilar Frontend (TypeScript + Vite)
         working-directory: frontend
         run: npm run build

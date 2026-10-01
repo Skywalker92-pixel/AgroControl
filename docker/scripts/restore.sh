@@ -6,8 +6,11 @@
 # ==============================================================================
 set -e
 
-BACKUP_FILE="$1"
-ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-agrocontrol_backup_secure_key_2026}"
+if [ -z "${BACKUP_ENCRYPTION_KEY}" ]; then
+    echo "ERROR: BACKUP_ENCRYPTION_KEY no configurado o vacío. Se requiere la clave de descifrado."
+    exit 1
+fi
+ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
 
 if [ -z "$BACKUP_FILE" ]; then
     echo "ERROR: Debe especificar la ruta del archivo de respaldo a restaurar."

@@ -224,8 +224,7 @@ export class CargasDistribucionService {
    * 5. Invariante: Stock Global de la empresa se mantiene inalterado.
    */
   async despacharCarga(id: string, usuarioId: string, ipOrigen?: string) {
-    try {
-      const carga = await this.prisma.carga_distribucion.findUnique({
+    const carga = await this.prisma.carga_distribucion.findUnique({
         where: { id },
       include: {
         carga_detalle: {
@@ -439,9 +438,6 @@ export class CargasDistribucionService {
 
         return cargaActualizada;
       });
-    } catch (err: any) {
-      throw err;
-    }
   }
 
   /**

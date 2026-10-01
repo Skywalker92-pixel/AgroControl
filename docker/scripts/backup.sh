@@ -9,7 +9,12 @@ BACKUP_PATH="${BACKUP_DIR:-/backups}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 FILENAME="agrocontrol_backup_${TIMESTAMP}.sql.gz.enc"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
-ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-agrocontrol_backup_secure_key_2026}"
+
+if [ -z "${BACKUP_ENCRYPTION_KEY}" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR CRÍTICO: BACKUP_ENCRYPTION_KEY no configurado o vacío. Abortando respaldo para evitar generar archivos desprotegidos."
+    exit 1
+fi
+ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
 
 mkdir -p "$BACKUP_PATH"
 

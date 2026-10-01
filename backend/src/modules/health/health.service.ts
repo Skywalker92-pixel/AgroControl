@@ -78,6 +78,7 @@ export class HealthService {
 
     const esDegradado =
       backups.alerta ||
+      backups.estado === 'no_verificable_en_cloud' ||
       observadas.alerta;
 
     const status: 'ok' | 'degradado' | 'critico' = esCritico
@@ -158,7 +159,7 @@ export class HealthService {
           estado: 'no_verificable_en_cloud',
           ultimo_backup: null,
           horas_desde_ultimo: null,
-          alerta: false,
+          alerta: true,
           archivos_encontrados: 0,
         };
       }

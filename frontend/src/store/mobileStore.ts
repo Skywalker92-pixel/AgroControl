@@ -15,6 +15,7 @@ import {
   guardarPullIndexedDB,
   actualizarColaIndexedDB,
   limpiarSincronizadasIndexedDB,
+  limpiarCargaActivaIndexedDB,
   guardarClienteIndexedDB,
   guardarTerminalInfoIndexedDB,
   migrarDesdeLocalStorageSiExiste,
@@ -62,6 +63,7 @@ interface MobileState {
   inicializarTerminal: () => Promise<void>;
   vincularTerminal: (modelo?: string, trabajadorId?: string) => Promise<DispositivoMovil>;
   ejecutarPull: (forzarCompleto?: boolean) => Promise<void>;
+  sincronizarPull: (forzarCompleto?: boolean) => Promise<void>;
   ejecutarPush: () => Promise<{ enviadas: number; aplicadas: number; observadas: number }>;
   sincronizarTodo: () => Promise<void>;
 
@@ -247,7 +249,18 @@ export const useMobileStore = create<MobileState>((set, get) => {
           listasPrecios: nuevasListas,
         };
 
-        const cargaActualizada = respuesta.datos.carga_activa || get().cargaActiva;
+        // OBS-MOB-NEW-01: Verificación explícita de carga_activa
+        let cargaActualizada: CargaActivaMovil | null = null;
+        if (respuesta.datos.carga_activa === null) {
+          // La carga fue liquidada o el vendedor no tiene ruta activa:
+          // Limpia el registro en IndexedDB y el estado en memoria sin hacer fallback a get().cargaActiva
+          await limpiarCargaActivaIndexedDB();
+          cargaActualizada = null;
+        } else if (respuesta.datos.carga_activa !== undefined) {
+          cargaActualizada = respuesta.datos.carga_activa;
+        } else {
+          cargaActualizada = get().cargaActiva;
+        }
 
         // Guardar de forma transaccional en IndexedDB
         await guardarPullIndexedDB({
@@ -273,6 +286,10 @@ export const useMobileStore = create<MobileState>((set, get) => {
         set({ isSyncing: false, syncError: msg });
         throw error;
       }
+    },
+
+    sincronizarPull: async (forzarCompleto = false) => {
+      return get().ejecutarPull(forzarCompleto);
     },
 
     ejecutarPush: async () => {

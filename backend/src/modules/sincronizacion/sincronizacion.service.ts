@@ -38,10 +38,13 @@ export class SincronizacionService {
     usuarioRol: string,
     ipOrigen?: string,
   ) {
-    const esVendedor = usuarioRol === RolUsuario.VENDEDOR;
+    const esAdmin =
+      usuarioRol === RolUsuario.ADMINISTRADOR_PROPIETARIO ||
+      usuarioRol === RolUsuario.ADMINISTRADOR_SECUNDARIO;
 
-    // Regla OBS-SEC-02: Para VENDEDOR, forzar trabajador_id a su propio ID (jwt.sub)
-    const trabajadorAsignadoId = esVendedor ? usuarioId : (dto.trabajador_id || usuarioId);
+    // Si NO es admin (tanto VENDEDOR como OPERADOR_ALMACEN):
+    // No puede asignar el dispositivo a terceros: fuerza trabajador_id = usuarioId
+    const trabajadorAsignadoId = esAdmin ? (dto.trabajador_id || usuarioId) : usuarioId;
 
     // Verificar si el trabajador asignado existe y es usuario activo
     const trabajador = await this.prisma.usuario.findUnique({
@@ -57,20 +60,24 @@ export class SincronizacionService {
     });
 
     if (existente) {
-      // Si un vendedor intenta modificar un dispositivo que pertenece a otro trabajador
-      if (esVendedor && existente.trabajador_id !== usuarioId) {
+      // Si un usuario no admin intenta modificar un dispositivo que pertenece a otro trabajador
+      if (!esAdmin && existente.trabajador_id !== usuarioId) {
         throw new ForbiddenException('No está autorizado para modificar un terminal móvil asignado a otro trabajador.');
       }
 
-      // Si es VENDEDOR, NUNCA puede sobreescribir autorizado a true ni cambiar trabajador
-      const autorizado = esVendedor
-        ? existente.autorizado // No puede auto-aprobarse, conserva estado previo
-        : (dto.autorizado !== undefined ? dto.autorizado : existente.autorizado);
+      // Si NO es admin: PRESERVA estrictamente el estado previo:
+      // activo = existente.activo, autorizado = existente.autorizado
+      // (Un vendedor u operador NUNCA puede reactivar un dispositivo marcado con activo = false por un administrador)
+      // Solo los administradores (esAdmin === true) pueden alterar libremente autorizado, activo y trabajador_id
+      const autorizado = esAdmin
+        ? (dto.autorizado !== undefined ? dto.autorizado : existente.autorizado)
+        : existente.autorizado;
 
-      const activo = esVendedor ? true : (dto.activo !== undefined ? dto.activo : existente.activo);
+      const activo = esAdmin
+        ? (dto.activo !== undefined ? dto.activo : existente.activo)
+        : existente.activo;
 
-      // Si no es vendedor y se proporciona trabajador_id, se actualiza; de lo contrario se conserva el asignado existente
-      const trabajadorFinal = !esVendedor && dto.trabajador_id
+      const trabajadorFinal = esAdmin && dto.trabajador_id
         ? dto.trabajador_id
         : existente.trabajador_id;
 
@@ -112,14 +119,16 @@ export class SincronizacionService {
     }
 
     // Crear nuevo registro de dispositivo móvil
-    // Para VENDEDOR: SIEMPRE autorizado = false y activo = true (pendiente de aprobación)
-    const nuevoAutorizado = esVendedor
-      ? false
-      : (dto.autorizado !== undefined ? dto.autorizado : true);
+    // Si NO es admin (tanto VENDEDOR como OPERADOR_ALMACEN):
+    // Si es un dispositivo nuevo: autorizado = false, activo = true
+    // Solo los administradores (esAdmin === true) pueden alterar libremente autorizado, activo y trabajador_id.
+    const nuevoAutorizado = esAdmin
+      ? (dto.autorizado !== undefined ? dto.autorizado : true)
+      : false;
 
-    const nuevoActivo = esVendedor
-      ? true
-      : (dto.activo !== undefined ? dto.activo : true);
+    const nuevoActivo = esAdmin
+      ? (dto.activo !== undefined ? dto.activo : true)
+      : true;
 
     const nuevo = await this.prisma.dispositivo_movil.create({
       data: {
@@ -432,41 +441,11 @@ export class SincronizacionService {
       if (dev) dispositivoId = dev.id;
     }
 
-    // Validar dispositivo emisor (OBS-SEC-03 y OBS-SEC-04)
-    // El dispositivo debe existir en BD, estar activo, autorizado y pertenecer al usuario
     const dispositivo = dispositivoId
       ? await this.prisma.dispositivo_movil.findUnique({
           where: { id: dispositivoId },
         })
       : null;
-
-    if (
-      !dispositivo ||
-      !dispositivo.activo ||
-      !dispositivo.autorizado ||
-      dispositivo.trabajador_id !== usuarioId
-    ) {
-      throw new ForbiddenException(
-        'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
-      );
-    }
-
-    // Validación obligatoria anti-IDOR para operaciones asociadas a carga (OBS-SEC-04)
-    // Antes de procesar cualquier operación de una carga, verificar existencia, EN_RUTA y trabajador_id === usuarioId
-    for (const op of dto.operaciones) {
-      if (op.carga_distribucion_id) {
-        const carga = await this.prisma.carga_distribucion.findUnique({
-          where: { id: op.carga_distribucion_id },
-          include: { vehiculo: true, bodega_movil: true },
-        });
-
-        if (!carga || carga.estado !== 'EN_RUTA' || carga.trabajador_id !== usuarioId) {
-          throw new ForbiddenException(
-            'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
-          );
-        }
-      }
-    }
 
     const timestampServidor = new Date();
     let totalAplicadas = 0;
@@ -483,7 +462,10 @@ export class SincronizacionService {
 
     // Procesamiento ordenado e individual de cada operación dentro del batch
     for (const op of dto.operaciones) {
-      // 1. REGLA DE IDEMPOTENCIA: Verificar existencia previa por UUID de cliente
+      // 1. REGLA ESTRICTA DE IDEMPOTENCIA (OBS-MOB-NEW-02):
+      // Consulta PRIMERO si el UUID (operacion.id) ya existe en operacion_sincronizada.
+      // Si YA EXISTE, responde inmediatamente con ya_procesado = true y su estado registrado,
+      // SIN validar si la carga sigue en estado EN_RUTA (pudo haber sido liquidada tras la venta).
       const opExistente = await this.prisma.operacion_sincronizada.findUnique({
         where: { id: op.id },
       });
@@ -501,24 +483,46 @@ export class SincronizacionService {
         continue;
       }
 
+      // 2. Solo si la operación es NUEVA, procede con las validaciones de negocio:
+      // A) Dispositivo emisor activo, autorizado y asignado al usuario
+      if (
+        !dispositivo ||
+        !dispositivo.activo ||
+        !dispositivo.autorizado ||
+        dispositivo.trabajador_id !== usuarioId
+      ) {
+        throw new ForbiddenException(
+          'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
+        );
+      }
+
+      // B) Carga en estado EN_RUTA y propiedad (carga.trabajador_id === usuarioId)
+      let cargaAsociada: any = null;
+      if (op.carga_distribucion_id) {
+        const carga = await this.prisma.carga_distribucion.findUnique({
+          where: { id: op.carga_distribucion_id },
+          include: { vehiculo: true, bodega_movil: true },
+        });
+
+        if (!carga || carga.estado !== 'EN_RUTA' || carga.trabajador_id !== usuarioId) {
+          throw new ForbiddenException(
+            'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
+          );
+        }
+        cargaAsociada = carga;
+      }
+
       const fechaOperacionMovil = new Date(op.fecha_operacion);
 
-      // 2. MÁQUINA DE ESTADOS Y VALIDACIÓN SEGÚN TIPO DE OPERACIÓN
+      // 3. MÁQUINA DE ESTADOS Y VALIDACIÓN SEGÚN TIPO DE OPERACIÓN
       if (op.tipo_operacion === 'VENTA') {
         let estadoCalculado: 'APLICADA' | 'OBSERVADA' = 'APLICADA';
         let motivoObservacion: string | null = null;
-        let cargaAsociada: any = null;
 
         // Validar que exista la carga
         if (!op.carga_distribucion_id) {
           estadoCalculado = 'OBSERVADA';
           motivoObservacion = 'La venta en ruta no especifica carga_distribucion_id.';
-        } else {
-          // La carga ya fue validada con estado EN_RUTA y trabajador_id === usuarioId
-          cargaAsociada = await this.prisma.carga_distribucion.findUnique({
-            where: { id: op.carga_distribucion_id },
-            include: { vehiculo: true, bodega_movil: true },
-          });
         }
 
         // Si la carga es válida, validar disponibilidad en Bodega Móvil
@@ -674,10 +678,12 @@ export class SincronizacionService {
     }
 
     // Actualizar timestamp de última sincronización en el dispositivo
-    await this.prisma.dispositivo_movil.updateMany({
-      where: { id: dispositivoId },
-      data: { ultima_sincronizacion: timestampServidor },
-    });
+    if (dispositivoId) {
+      await this.prisma.dispositivo_movil.updateMany({
+        where: { id: dispositivoId },
+        data: { ultima_sincronizacion: timestampServidor },
+      });
+    }
 
     return {
       total_recibidas: dto.operaciones.length,

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -10,6 +11,9 @@ async function bootstrap() {
 
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+
+  // Cabeceras de seguridad HTTP (OBS-WEB-02)
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   // Prefijo global requerido por directrices de API
   app.setGlobalPrefix('api');

@@ -63,7 +63,7 @@ describe('Hito 2: Catálogo, Unidades Base, Presentaciones, Precios y Clientes (
   });
 
   it('1. Setup de Categoría -> Crear o recuperar categoría de Herbicidas', async () => {
-    let cat = await prisma.categoria.findUnique({ where: { codigo: 'CAT-HERB' } });
+    const cat = await prisma.categoria.findUnique({ where: { codigo: 'CAT-HERB' } });
     if (!cat) {
       const res = await request(app.getHttpServer())
         .post('/api/categorias')

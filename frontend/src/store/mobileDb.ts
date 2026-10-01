@@ -207,6 +207,16 @@ export async function guardarVentaAtomicaIndexedDB(
 }
 
 /**
+ * Limpia la carga activa en IndexedDB cuando se liquida o no hay ruta activa (OBS-MOB-NEW-01)
+ */
+export async function limpiarCargaActivaIndexedDB(): Promise<void> {
+  const db = await getMobileDB();
+  const tx = db.transaction('carga_activa', 'readwrite');
+  await tx.objectStore('carga_activa').clear();
+  await tx.done;
+}
+
+/**
  * Persistencia atómica de la descarga del catálogo, clientes y carga activa
  */
 export async function guardarPullIndexedDB(datos: {
@@ -219,11 +229,9 @@ export async function guardarPullIndexedDB(datos: {
   const stores: Array<'catalogo' | 'clientes' | 'carga_activa' | 'metadata'> = [
     'catalogo',
     'clientes',
+    'carga_activa',
     'metadata',
   ];
-  if (datos.cargaActiva) {
-    stores.push('carga_activa');
-  }
 
   const tx = db.transaction(stores, 'readwrite');
   await tx.objectStore('catalogo').put(datos.catalogo, 'actual');
@@ -234,8 +242,11 @@ export async function guardarPullIndexedDB(datos: {
     await clientesStore.put(c);
   }
 
-  if (datos.cargaActiva) {
-    await tx.objectStore('carga_activa').put(datos.cargaActiva, 'actual');
+  const cargaStore = tx.objectStore('carga_activa');
+  if (datos.cargaActiva === null) {
+    await cargaStore.clear();
+  } else if (datos.cargaActiva) {
+    await cargaStore.put(datos.cargaActiva, 'actual');
   }
 
   await tx.objectStore('metadata').put(datos.ultimaSync, 'ultima_sync');

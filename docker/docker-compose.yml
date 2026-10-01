@@ -19,7 +19,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-agrocontrol_db}
       POSTGRES_USER: ${DB_USER:-agrocontrol_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-agrocontrol_secret_pass_2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD requerido}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       # Se expone en el puerto 5433 del host por defecto para evitar colisiones con otros Postgres
@@ -52,8 +52,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://agrocontrol_user:agrocontrol_secret_pass_2026@agrocontrol-db:5432/agrocontrol_db?schema=public}
-      JWT_SECRET: ${JWT_SECRET:-super_seguro_jwt_secret_agrocontrol_2026_pro_token}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://agrocontrol_user:${DB_PASSWORD:?DB_PASSWORD requerido}@agrocontrol-db:5432/agrocontrol_db?schema=public}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requerido}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       DISPATCH_STOCK_DEDUCT_EVENT: ${DISPATCH_STOCK_DEDUCT_EVENT:-DESPACHADO}
       METODO_VALORIZACION_DEFAULT: ${METODO_VALORIZACION_DEFAULT:-PROMEDIO_PONDERADO}
@@ -99,10 +99,10 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-agrocontrol_db}
       DB_USER: ${DB_USER:-agrocontrol_user}
-      DB_PASSWORD: ${DB_PASSWORD:-agrocontrol_secret_pass_2026}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD requerido}
       BACKUP_DIR: /backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-agrocontrol_backup_secure_key_2026}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY requerido}
     volumes:
       - ../backups:/backups
       - ./scripts/backup.sh:/backup.sh:ro

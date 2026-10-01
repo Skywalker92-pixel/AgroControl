@@ -287,6 +287,48 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
         .set('X-App-Version', '1.0.0')
         .expect(403);
     });
+
+    it('1.7 [OBS-SEC-NEW-02] Un vendedor u operador no puede reactivar un dispositivo existente deshabilitado (activo = false)', async () => {
+      // 1. Admin crea y autoriza un dispositivo, pero en estado inactivo (activo = false)
+      const codDevInactivo = `DEV-INACTIVO-${Date.now()}`;
+      const devRes = await request(app.getHttpServer())
+        .post('/api/sync/dispositivos/registrar')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          codigo_dispositivo: codDevInactivo,
+          modelo: 'Terminal Deshabilitado',
+          trabajador_id: vendedorUser.id,
+          activo: false,
+          autorizado: true,
+        })
+        .expect(201);
+
+      expect(devRes.body.dispositivo.activo).toBe(false);
+
+      // 2. Vendedor intenta re-registrar el dispositivo existente enviando activo = true
+      const vReactivar = await request(app.getHttpServer())
+        .post('/api/sync/dispositivos/registrar')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .send({
+          codigo_dispositivo: codDevInactivo,
+          modelo: 'Terminal Reactivado Intento',
+          activo: true,
+        })
+        .expect(201);
+
+      // Debe preservar estrictamente activo = false
+      expect(vReactivar.body.dispositivo.activo).toBe(false);
+
+      // 3. Operador de almacén tampoco puede reactivar ni asignar dispositivos ajenos
+      await request(app.getHttpServer())
+        .post('/api/sync/dispositivos/registrar')
+        .set('Authorization', `Bearer ${operadorToken}`)
+        .send({
+          codigo_dispositivo: codDevInactivo,
+          activo: true,
+        })
+        .expect(403);
+    });
   });
 
   // ============================================================================
@@ -633,6 +675,53 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
         where: { id: idorVentaId },
       });
       expect(opEnBd).toBeNull();
+    });
+
+    it('4.6 [OBS-MOB-NEW-02] IDEMPOTENCIA TARDÍA: Reintento devuelve ya_procesado: true aun si la carga asociada ya se encuentra FINALIZADA', async () => {
+      // 1. Simular que la carga fue liquidada y pasa a FINALIZADA (ya no está EN_RUTA)
+      await prisma.carga_distribucion.update({
+        where: { id: cargaEnRutaId },
+        data: { estado: 'FINALIZADA' },
+      });
+
+      // 2. El móvil (por reintento offline tardío) reenvía la MISMA venta previa (venta1Id de 4.1)
+      const resReintento = await request(app.getHttpServer())
+        .post('/api/sync/push')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-Device-Id', dispositivoId)
+        .set('X-App-Version', '1.0.0')
+        .send({
+          dispositivo_id: dispositivoId,
+          operaciones: [
+            {
+              id: venta1Id,
+              tipo_operacion: 'VENTA',
+              carga_distribucion_id: cargaEnRutaId,
+              fecha_operacion: fechaVenta1,
+              total: 250.0,
+              detalles: [
+                {
+                  producto_id: productoId,
+                  cantidad: 10,
+                  precio_unitario: 25.0,
+                  subtotal: 250.0,
+                },
+              ],
+            },
+          ],
+        })
+        .expect(201); // No debe responder 403 Forbidden!
+
+      expect(resReintento.body.total_reintentos_ignorados).toBe(1);
+      expect(resReintento.body.resultados[0].id).toBe(venta1Id);
+      expect(resReintento.body.resultados[0].ya_procesado).toBe(true);
+      expect(resReintento.body.resultados[0].estado_sync).toBe('APLICADA');
+
+      // 3. Restaurar estado de la carga a EN_RUTA para consistencia de tests posteriores
+      await prisma.carga_distribucion.update({
+        where: { id: cargaEnRutaId },
+        data: { estado: 'EN_RUTA' },
+      });
     });
   });
 
