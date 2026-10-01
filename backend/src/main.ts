@@ -3,6 +3,11 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret.length < 16) {
+    throw new Error('FATAL: JWT_SECRET no configurado en entorno');
+  }
+
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 

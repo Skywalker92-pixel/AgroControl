@@ -220,6 +220,73 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
         data: { autorizado: true },
       });
     });
+
+    it('1.4 [OBS-SEC-02] Un vendedor solo registra dispositivos en estado pendiente y no puede auto-aprobarse ni cambiar trabajador', async () => {
+      const codigoDevVendedor = `DEV-PENDING-${Date.now()}`;
+      const res = await request(app.getHttpServer())
+        .post('/api/sync/dispositivos/registrar')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .send({
+          codigo_dispositivo: codigoDevVendedor,
+          modelo: 'Xiaomi Redmi Note 12',
+          sistema_operativo: 'Android 13',
+          version_app: '1.0.0',
+          trabajador_id: adminUser.id, // Intento de asignar a otro usuario
+          autorizado: true, // Intento de auto-aprobarse
+        })
+        .expect(201);
+
+      expect(res.body.dispositivo.codigo_dispositivo).toBe(codigoDevVendedor);
+      expect(res.body.dispositivo.autorizado).toBe(false); // Siempre false
+      expect(res.body.dispositivo.activo).toBe(true);
+      expect(res.body.dispositivo.trabajador_id).toBe(vendedorUser.id); // Forzado a jwt.sub
+
+      // Vendedor recibe 403 Forbidden al intentar autorizar terminales
+      await request(app.getHttpServer())
+        .patch(`/api/sync/dispositivos/${res.body.dispositivo.id}/autorizar`)
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .expect(403);
+
+      // Solo administradores pueden autorizar terminales móviles
+      const resAutorizar = await request(app.getHttpServer())
+        .patch(`/api/sync/dispositivos/${res.body.dispositivo.id}/autorizar`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(resAutorizar.body.dispositivo.autorizado).toBe(true);
+    });
+
+    it('1.5 [OBS-SEC-03] Guard bloquea con 400 Bad Request si falta la cabecera X-Device-Id en rutas móviles', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/sync/pull')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-App-Version', '1.0.0')
+        .expect(400);
+
+      expect(res.body.message).toContain('Cabecera X-Device-Id requerida');
+    });
+
+    it('1.6 [OBS-SEC-03] Guard bloquea con 403 Forbidden si el dispositivo pertenece a otro trabajador', async () => {
+      // Registrar dispositivo para el administrador
+      const devAdmin = await prisma.dispositivo_movil.create({
+        data: {
+          id: randomUUID(),
+          codigo_dispositivo: `DEV-ADMIN-${Date.now()}`,
+          modelo: 'Admin Phone',
+          trabajador_id: adminUser.id,
+          activo: true,
+          autorizado: true,
+        },
+      });
+
+      // Vendedor intenta operar con el dispositivo del administrador
+      await request(app.getHttpServer())
+        .get('/api/sync/pull')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-Device-Id', devAdmin.id)
+        .set('X-App-Version', '1.0.0')
+        .expect(403);
+    });
   });
 
   // ============================================================================
@@ -243,6 +310,7 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
       await request(app.getHttpServer())
         .get('/api/sync/pull')
         .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-Device-Id', dispositivoId)
         .set('X-App-Version', '1.0.0')
         .expect(200);
     });
@@ -285,6 +353,7 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
       const res = await request(app.getHttpServer())
         .get(`/api/sync/pull?ultima_sincronizacion=${encodeURIComponent(timestampFiltro)}`)
         .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-Device-Id', dispositivoId)
         .set('X-App-Version', '1.0.0')
         .expect(200);
 
@@ -486,6 +555,84 @@ describe('Hito 11: Infraestructura de Red Híbrida y Motor de Sincronización Id
         },
       });
       expect(Number(saldoBodega?.cantidad_fisica)).toBe(40);
+    });
+
+    it('4.5 [OBS-SEC-04] IDOR: Bloquea con 403 Forbidden si un vendedor intenta registrar ventas sobre una carga asignada a otro trabajador', async () => {
+      // 1. Crear vehículo y carga asignada al administrador
+      const vehOtroRes = await request(app.getHttpServer())
+        .post('/api/distribucion/vehiculos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          placa: `ADM-${Math.floor(100 + Math.random() * 900)}`,
+          marca: 'Toyota',
+          modelo: 'Hilux',
+          tipo_vehiculo: 'Camioneta',
+          capacidad_kg: 1500,
+          conductor_habitual_id: adminUser.id,
+        });
+
+      const cargaOtroRes = await request(app.getHttpServer())
+        .post('/api/distribucion/cargas')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          almacen_origen_id: almacenOrigenId,
+          vehiculo_id: vehOtroRes.body.id,
+          trabajador_id: adminUser.id, // Asignada a admin, NO al vendedor
+          fecha_salida: new Date().toISOString().split('T')[0],
+          observaciones: 'Carga de prueba para detección IDOR',
+          detalles: [
+            {
+              producto_id: productoId,
+              cantidad_presentacion: 0,
+              cantidad_unidades_sueltas: 20,
+            },
+          ],
+        });
+
+      const cargaAdminId = cargaOtroRes.body.id;
+
+      // Despachar a EN_RUTA
+      await request(app.getHttpServer())
+        .patch(`/api/distribucion/cargas/${cargaAdminId}/despachar`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      // 2. Vendedor intenta enviar venta sobre la carga del administrador
+      const idorVentaId = randomUUID();
+      const resIdor = await request(app.getHttpServer())
+        .post('/api/sync/push')
+        .set('Authorization', `Bearer ${vendedorToken}`)
+        .set('X-Device-Id', dispositivoId)
+        .set('X-App-Version', '1.0.0')
+        .send({
+          dispositivo_id: dispositivoId,
+          operaciones: [
+            {
+              id: idorVentaId,
+              tipo_operacion: 'VENTA',
+              carga_distribucion_id: cargaAdminId, // IDOR: Carga de otro trabajador!
+              fecha_operacion: new Date().toISOString(),
+              total: 50.0,
+              detalles: [
+                {
+                  producto_id: productoId,
+                  cantidad: 2,
+                  precio_unitario: 25.0,
+                  subtotal: 50.0,
+                },
+              ],
+            },
+          ],
+        })
+        .expect(403);
+
+      expect(resIdor.body.message).toContain('No está autorizado para registrar ventas sobre una carga asignada a otro trabajador');
+
+      // 3. Verificar que la operación NO fue registrada en BD
+      const opEnBd = await prisma.operacion_sincronizada.findUnique({
+        where: { id: idorVentaId },
+      });
+      expect(opEnBd).toBeNull();
     });
   });
 

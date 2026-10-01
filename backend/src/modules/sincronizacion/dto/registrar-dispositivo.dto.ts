@@ -29,5 +29,5 @@ export class RegistrarDispositivoDto {
 
   @IsOptional()
   @IsBoolean({ message: 'El campo autorizado debe ser booleano' })
-  autorizado?: boolean = true;
+  autorizado?: boolean;
 }

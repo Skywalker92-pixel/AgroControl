@@ -17,6 +17,7 @@ import {
   AccionResolucionOperacion,
 } from './dto/resolver-operacion-observada.dto';
 import { Prisma } from '@prisma/client';
+import { RolUsuario } from '../auth/roles/roles.enum';
 
 @Injectable()
 export class SincronizacionService {
@@ -37,7 +38,10 @@ export class SincronizacionService {
     usuarioRol: string,
     ipOrigen?: string,
   ) {
-    const trabajadorAsignadoId = dto.trabajador_id || usuarioId;
+    const esVendedor = usuarioRol === RolUsuario.VENDEDOR;
+
+    // Regla OBS-SEC-02: Para VENDEDOR, forzar trabajador_id a su propio ID (jwt.sub)
+    const trabajadorAsignadoId = esVendedor ? usuarioId : (dto.trabajador_id || usuarioId);
 
     // Verificar si el trabajador asignado existe y es usuario activo
     const trabajador = await this.prisma.usuario.findUnique({
@@ -53,6 +57,23 @@ export class SincronizacionService {
     });
 
     if (existente) {
+      // Si un vendedor intenta modificar un dispositivo que pertenece a otro trabajador
+      if (esVendedor && existente.trabajador_id !== usuarioId) {
+        throw new ForbiddenException('No está autorizado para modificar un terminal móvil asignado a otro trabajador.');
+      }
+
+      // Si es VENDEDOR, NUNCA puede sobreescribir autorizado a true ni cambiar trabajador
+      const autorizado = esVendedor
+        ? existente.autorizado // No puede auto-aprobarse, conserva estado previo
+        : (dto.autorizado !== undefined ? dto.autorizado : existente.autorizado);
+
+      const activo = esVendedor ? true : (dto.activo !== undefined ? dto.activo : existente.activo);
+
+      // Si no es vendedor y se proporciona trabajador_id, se actualiza; de lo contrario se conserva el asignado existente
+      const trabajadorFinal = !esVendedor && dto.trabajador_id
+        ? dto.trabajador_id
+        : existente.trabajador_id;
+
       // Si ya existe, actualizamos su información de terminal y mantenemos trazabilidad
       const actualizado = await this.prisma.dispositivo_movil.update({
         where: { id: existente.id },
@@ -60,9 +81,9 @@ export class SincronizacionService {
           modelo: dto.modelo || existente.modelo,
           sistema_operativo: dto.sistema_operativo || existente.sistema_operativo,
           version_app: dto.version_app || existente.version_app,
-          trabajador_id: trabajadorAsignadoId,
-          activo: dto.activo !== undefined ? dto.activo : existente.activo,
-          autorizado: dto.autorizado !== undefined ? dto.autorizado : existente.autorizado,
+          trabajador_id: trabajadorFinal,
+          activo,
+          autorizado,
           actualizado_en: new Date(),
         },
         include: {
@@ -83,12 +104,23 @@ export class SincronizacionService {
       });
 
       return {
-        mensaje: 'Dispositivo móvil actualizado exitosamente.',
+        mensaje: actualizado.autorizado
+          ? 'Dispositivo móvil actualizado exitosamente.'
+          : 'Dispositivo móvil actualizado en estado pendiente de aprobación.',
         dispositivo: actualizado,
       };
     }
 
     // Crear nuevo registro de dispositivo móvil
+    // Para VENDEDOR: SIEMPRE autorizado = false y activo = true (pendiente de aprobación)
+    const nuevoAutorizado = esVendedor
+      ? false
+      : (dto.autorizado !== undefined ? dto.autorizado : true);
+
+    const nuevoActivo = esVendedor
+      ? true
+      : (dto.activo !== undefined ? dto.activo : true);
+
     const nuevo = await this.prisma.dispositivo_movil.create({
       data: {
         id: randomUUID(),
@@ -97,8 +129,8 @@ export class SincronizacionService {
         sistema_operativo: dto.sistema_operativo || 'Android',
         version_app: dto.version_app || '1.0.0',
         trabajador_id: trabajadorAsignadoId,
-        activo: dto.activo !== undefined ? dto.activo : true,
-        autorizado: dto.autorizado !== undefined ? dto.autorizado : true,
+        activo: nuevoActivo,
+        autorizado: nuevoAutorizado,
         creado_en: new Date(),
         actualizado_en: new Date(),
       },
@@ -119,8 +151,57 @@ export class SincronizacionService {
     });
 
     return {
-      mensaje: 'Dispositivo móvil registrado y autorizado exitosamente.',
+      mensaje: nuevo.autorizado
+        ? 'Dispositivo móvil registrado y autorizado exitosamente.'
+        : 'Dispositivo móvil registrado en estado pendiente de aprobación.',
       dispositivo: nuevo,
+    };
+  }
+
+  /**
+   * 1.1 Autorización Administrativa de Dispositivos Móviles (OBS-SEC-02).
+   * Exclusivo para administradores.
+   */
+  async autorizarDispositivo(
+    id: string,
+    usuarioId: string,
+    ipOrigen?: string,
+  ) {
+    const dispositivo = await this.prisma.dispositivo_movil.findUnique({
+      where: { id },
+    });
+
+    if (!dispositivo) {
+      throw new NotFoundException(`Dispositivo móvil con ID '${id}' no encontrado.`);
+    }
+
+    const actualizado = await this.prisma.dispositivo_movil.update({
+      where: { id },
+      data: {
+        autorizado: true,
+        activo: true,
+        actualizado_en: new Date(),
+      },
+      include: {
+        usuario: {
+          select: { id: true, nombre_completo: true, username: true, rol: true },
+        },
+      },
+    });
+
+    await this.auditoriaService.registrarEvento({
+      entidad: 'dispositivo_movil',
+      registro_id: actualizado.id,
+      accion: 'UPDATE',
+      valor_anterior: dispositivo,
+      valor_nuevo: actualizado,
+      usuario_id: usuarioId,
+      ip_origen: ipOrigen,
+    });
+
+    return {
+      mensaje: 'Dispositivo móvil autorizado exitosamente.',
+      dispositivo: actualizado,
     };
   }
 
@@ -329,6 +410,7 @@ export class SincronizacionService {
     dto: SincronizacionPushDto,
     usuarioId: string,
     ipOrigen?: string,
+    deviceIdHeader?: string,
   ) {
     if (!dto.operaciones || dto.operaciones.length === 0) {
       return {
@@ -342,7 +424,7 @@ export class SincronizacionService {
     }
 
     // Resolver dispositivo móvil emisor
-    let dispositivoId = dto.dispositivo_id;
+    let dispositivoId = dto.dispositivo_id || deviceIdHeader;
     if (!dispositivoId && dto.codigo_dispositivo) {
       const dev = await this.prisma.dispositivo_movil.findUnique({
         where: { codigo_dispositivo: dto.codigo_dispositivo },
@@ -350,25 +432,39 @@ export class SincronizacionService {
       if (dev) dispositivoId = dev.id;
     }
 
-    if (!dispositivoId) {
-      // Buscar el dispositivo habitual asignado al usuario
-      const devUser = await this.prisma.dispositivo_movil.findFirst({
-        where: { trabajador_id: usuarioId, activo: true },
-      });
-      if (devUser) {
-        dispositivoId = devUser.id;
-      } else {
-        // Auto-registrar dispositivo genérico para el usuario
-        const autoDev = await this.prisma.dispositivo_movil.create({
-          data: {
-            codigo_dispositivo: `DEV-AUTO-${usuarioId.slice(0, 8)}`,
-            modelo: 'Terminal Móvil',
-            trabajador_id: usuarioId,
-            activo: true,
-            autorizado: true,
-          },
+    // Validar dispositivo emisor (OBS-SEC-03 y OBS-SEC-04)
+    // El dispositivo debe existir en BD, estar activo, autorizado y pertenecer al usuario
+    const dispositivo = dispositivoId
+      ? await this.prisma.dispositivo_movil.findUnique({
+          where: { id: dispositivoId },
+        })
+      : null;
+
+    if (
+      !dispositivo ||
+      !dispositivo.activo ||
+      !dispositivo.autorizado ||
+      dispositivo.trabajador_id !== usuarioId
+    ) {
+      throw new ForbiddenException(
+        'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
+      );
+    }
+
+    // Validación obligatoria anti-IDOR para operaciones asociadas a carga (OBS-SEC-04)
+    // Antes de procesar cualquier operación de una carga, verificar existencia, EN_RUTA y trabajador_id === usuarioId
+    for (const op of dto.operaciones) {
+      if (op.carga_distribucion_id) {
+        const carga = await this.prisma.carga_distribucion.findUnique({
+          where: { id: op.carga_distribucion_id },
+          include: { vehiculo: true, bodega_movil: true },
         });
-        dispositivoId = autoDev.id;
+
+        if (!carga || carga.estado !== 'EN_RUTA' || carga.trabajador_id !== usuarioId) {
+          throw new ForbiddenException(
+            'No está autorizado para registrar ventas sobre una carga asignada a otro trabajador',
+          );
+        }
       }
     }
 
@@ -413,20 +509,16 @@ export class SincronizacionService {
         let motivoObservacion: string | null = null;
         let cargaAsociada: any = null;
 
-        // Validar que exista la carga y esté EN_RUTA
+        // Validar que exista la carga
         if (!op.carga_distribucion_id) {
           estadoCalculado = 'OBSERVADA';
           motivoObservacion = 'La venta en ruta no especifica carga_distribucion_id.';
         } else {
+          // La carga ya fue validada con estado EN_RUTA y trabajador_id === usuarioId
           cargaAsociada = await this.prisma.carga_distribucion.findUnique({
             where: { id: op.carga_distribucion_id },
             include: { vehiculo: true, bodega_movil: true },
           });
-
-          if (!cargaAsociada || cargaAsociada.estado !== 'EN_RUTA') {
-            estadoCalculado = 'OBSERVADA';
-            motivoObservacion = `La carga ${op.carga_distribucion_id} no existe o no está en estado EN_RUTA.`;
-          }
         }
 
         // Si la carga es válida, validar disponibilidad en Bodega Móvil

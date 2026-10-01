@@ -171,6 +171,12 @@ describe('Hito 13: Sincronización, Gestión de Conflictos y Auditoría Administ
         trabajador_id: vendedorUser.id,
       });
     dispositivoId = termRes.body.dispositivo.id;
+
+    // Administrador autoriza el terminal móvil registrado por el vendedor (OBS-SEC-02)
+    await request(app.getHttpServer())
+      .patch(`/api/sync/dispositivos/${dispositivoId}/autorizar`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
   });
 
   afterAll(async () => {

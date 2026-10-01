@@ -16,10 +16,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly configService: ConfigService,
     private readonly usuariosService: UsuariosService,
   ) {
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    if (!jwtSecret || jwtSecret.length < 16) {
+      throw new Error('FATAL: JWT_SECRET no configurado en entorno');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'super_seguro_jwt_secret_agrocontrol_2026_pro_token',
+      secretOrKey: jwtSecret,
     });
   }
 

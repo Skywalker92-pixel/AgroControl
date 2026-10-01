@@ -14,12 +14,18 @@ import { UsuariosModule } from '../usuarios/usuarios.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'super_seguro_jwt_secret_agrocontrol_2026_pro_token',
-        signOptions: {
-          expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '8h',
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret || secret.length < 16) {
+          throw new Error('FATAL: JWT_SECRET no configurado en entorno');
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '8h',
+          },
+        };
+      },
     }),
     UsuariosModule,
   ],

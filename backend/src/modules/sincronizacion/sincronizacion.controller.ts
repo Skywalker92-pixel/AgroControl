@@ -9,6 +9,7 @@ import {
   Query,
   Res,
   UseGuards,
+  Headers,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { SincronizacionService } from './sincronizacion.service';
@@ -56,6 +57,27 @@ export class SincronizacionController {
   }
 
   /**
+   * 1.1 Autorización de Terminales Móviles (OBS-SEC-02 / OBS-SEC-03).
+   * Acción EXCLUSIVA para ADMINISTRADOR_PROPIETARIO y ADMINISTRADOR_SECUNDARIO.
+   */
+  @Patch('dispositivos/:id/autorizar')
+  @Roles(
+    RolUsuario.ADMINISTRADOR_PROPIETARIO,
+    RolUsuario.ADMINISTRADOR_SECUNDARIO,
+  )
+  autorizarDispositivo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') usuarioId: string,
+    @ClientIp() ipOrigen: string,
+  ) {
+    return this.sincronizacionService.autorizarDispositivo(
+      id,
+      usuarioId,
+      ipOrigen,
+    );
+  }
+
+  /**
    * 2. Sincronización Descendente Incremental (PULL: PC -> Móvil).
    * Valida versión mínima requerida (426 Upgrade Required) y estado activo del terminal.
    */
@@ -95,11 +117,13 @@ export class SincronizacionController {
     @Body() dto: SincronizacionPushDto,
     @CurrentUser('id') usuarioId: string,
     @ClientIp() ipOrigen: string,
+    @Headers('x-device-id') deviceIdHeader?: string,
   ) {
     return this.sincronizacionService.sincronizacionPush(
       dto,
       usuarioId,
       ipOrigen,
+      deviceIdHeader,
     );
   }
 

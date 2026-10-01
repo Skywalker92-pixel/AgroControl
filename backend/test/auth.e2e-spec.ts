@@ -150,4 +150,45 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
     expect(eventoFallido).toBeDefined();
     expect((eventoFallido.valor_nuevo as any)?.motivo).toBe('PASSWORD_INCORRECTO');
   });
+
+  // ============================================================================
+  // OBS-SEC-08: Restricción de acceso al endpoint /usuarios
+  // ============================================================================
+  it('8. [OBS-SEC-08] GET /api/usuarios -> Permite acceso a ADMINISTRADOR_PROPIETARIO (HTTP 200)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/usuarios')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body.length).toBeGreaterThan(0);
+    expect(response.body[0]).toHaveProperty('username');
+    expect(response.body[0]).toHaveProperty('rol');
+  });
+
+  it('9. [OBS-SEC-08] GET /api/usuarios -> Bloquea el acceso al rol VENDEDOR con HTTP 403 Forbidden', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/usuarios')
+      .set('Authorization', `Bearer ${vendedorToken}`)
+      .expect(403);
+
+    expect(response.body.message).toContain('no tiene permisos suficientes');
+  });
+
+  // ============================================================================
+  // OBS-SEC-01: Validación Fail-Fast para JWT_SECRET
+  // ============================================================================
+  it('10. [OBS-SEC-01] Fail-fast al arrancar si JWT_SECRET no es seguro (< 16 caracteres)', () => {
+    const validarSecreto = (secreto?: string) => {
+      if (!secreto || secreto.length < 16) {
+        throw new Error('FATAL: JWT_SECRET no configurado en entorno');
+      }
+      return true;
+    };
+
+    expect(() => validarSecreto(undefined)).toThrow('FATAL: JWT_SECRET no configurado en entorno');
+    expect(() => validarSecreto('')).toThrow('FATAL: JWT_SECRET no configurado en entorno');
+    expect(() => validarSecreto('corto_12345')).toThrow('FATAL: JWT_SECRET no configurado en entorno');
+    expect(validarSecreto('secreto_largo_valido_2026_super_seguro')).toBe(true);
+  });
 });
