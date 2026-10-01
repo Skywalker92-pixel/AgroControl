@@ -1,0 +1,77 @@
+name: AgroControl Pro CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci-pipeline:
+    name: Build, Lint & Test (PostgreSQL 15 + NestJS + Vite)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: agrocontrol_db
+          POSTGRES_USER: agrocontrol_user
+          POSTGRES_PASSWORD: agrocontrol_secret_pass_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://agrocontrol_user:agrocontrol_secret_pass_2026@localhost:5432/agrocontrol_db?schema=public
+      JWT_SECRET: super_seguro_jwt_secret_agrocontrol_2026_pro_token
+      JWT_EXPIRES_IN: 8h
+      PORT: 3000
+
+    steps:
+      - name: 1. Checkout de código
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: 3. Esperar y ejecutar migraciones y seed inicial en PostgreSQL
+        run: |
+          echo "Aplicando esquema y migraciones ordenadas..."
+          for sql in database/migrations/*.sql; do
+            echo "Ejecutando migración: $sql"
+            PGPASSWORD=agrocontrol_secret_pass_2026 psql -h localhost -p 5432 -U agrocontrol_user -d agrocontrol_db -f "$sql"
+          done
+          echo "Ejecutando seed fase 1..."
+          PGPASSWORD=agrocontrol_secret_pass_2026 psql -h localhost -p 5432 -U agrocontrol_user -d agrocontrol_db -f "database/seeds/001_seed_fase1.sql"
+
+      - name: 4. Instalar dependencias del Backend
+        working-directory: backend
+        run: npm ci
+
+      - name: 5. Generar Prisma Client y Compilar Backend
+        working-directory: backend
+        run: npm run build
+
+      - name: 6. Ejecutar Batería Completa de Pruebas E2E del Backend
+        working-directory: backend
+        run: npm run test:e2e
+
+      - name: 7. Instalar dependencias del Frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: 8. Compilar Frontend (TypeScript + Vite)
+        working-directory: frontend
+        run: npm run build

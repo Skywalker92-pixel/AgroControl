@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
@@ -21,6 +23,17 @@ import { HealthModule } from './modules/health/health.module';
       isGlobal: true,
       envFilePath: ['.env', '../.env'],
     }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: config.get<number>('THROTTLE_TTL', 60000),
+          limit: config.get<number>('THROTTLE_LIMIT', 100),
+        },
+      ],
+    }),
     PrismaModule,
     AuditoriaModule,
     UsuariosModule,
@@ -35,6 +48,12 @@ import { HealthModule } from './modules/health/health.module';
     DistribucionModule,
     SincronizacionModule,
     HealthModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

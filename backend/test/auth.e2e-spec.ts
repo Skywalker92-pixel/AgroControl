@@ -191,4 +191,27 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
     expect(() => validarSecreto('corto_12345')).toThrow('FATAL: JWT_SECRET no configurado en entorno');
     expect(validarSecreto('secreto_largo_valido_2026_super_seguro')).toBe(true);
   });
+
+  // ============================================================================
+  // OBS-SEC-06: Rate Limiting y Protección contra Fuerza Bruta
+  // ============================================================================
+  it('11. [OBS-SEC-06] Rate limiting: Bloquea con 429 Too Many Requests al exceder 5 intentos en /auth/login', async () => {
+    // Los tests 1, 5 y 7 consumieron 3 intentos.
+    // Intento 4:
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+
+    // Intento 5 (límite alcanzado):
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+
+    // Intento 6 (supera el límite de 5 por minuto):
+    const resThrottled = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+
+    expect(resThrottled.status).toBe(429);
+  });
 });

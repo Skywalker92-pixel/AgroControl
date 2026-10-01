@@ -22,6 +22,7 @@ interface DbHealth {
 }
 
 interface BackupHealth {
+  estado?: string;
   ultimo_backup: string | null;
   horas_desde_ultimo: number | null;
   alerta: boolean;
@@ -146,28 +147,30 @@ export class HealthService {
 
   private async checkBackups(): Promise<BackupHealth> {
     try {
-      // En despliegues cloud (Supabase), los backups son automáticos a nivel de plataforma
+      // En despliegues cloud (Render / Supabase), si no se puede acceder físicamente a los snapshots de backups,
+      // se reporta el estado como 'no_verificable_en_cloud' en lugar de simular un estado ficticio (OBS-BKP-02).
       if (
         process.env.BACKUPS_CLOUD_MANAGED === 'true' ||
         process.env.DATABASE_URL?.includes('supabase') ||
         process.env.RENDER === 'true'
       ) {
         return {
-          ultimo_backup: new Date().toISOString(),
-          horas_desde_ultimo: 0,
+          estado: 'no_verificable_en_cloud',
+          ultimo_backup: null,
+          horas_desde_ultimo: null,
           alerta: false,
-          archivos_encontrados: 1,
+          archivos_encontrados: 0,
         };
       }
 
       const backupDir = this.getBackupDir();
       if (!fs.existsSync(backupDir)) {
-        return { ultimo_backup: null, horas_desde_ultimo: null, alerta: true, archivos_encontrados: 0 };
+        return { estado: 'sin_directorio', ultimo_backup: null, horas_desde_ultimo: null, alerta: true, archivos_encontrados: 0 };
       }
 
       const archivos = fs
         .readdirSync(backupDir)
-        .filter((f) => f.endsWith('.sql.gz') || f.endsWith('.sql'))
+        .filter((f) => f.endsWith('.sql.gz.enc') || f.endsWith('.sql.gz') || f.endsWith('.sql'))
         .map((f) => {
           const filePath = path.join(backupDir, f);
           const stat = fs.statSync(filePath);
@@ -190,6 +193,7 @@ export class HealthService {
       const alerta = horasDesdeUltimo > 26;
 
       return {
+        estado: 'local_ok',
         ultimo_backup: ultimo.mtime.toISOString(),
         horas_desde_ultimo: Math.round(horasDesdeUltimo * 10) / 10,
         alerta,

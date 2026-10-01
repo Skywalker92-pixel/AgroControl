@@ -26,8 +26,8 @@ services:
       - "${HOST_DB_PORT:-5433}:5432"
     volumes:
       - agrocontrol_pgdata:/var/lib/postgresql/data
-      # Scripts de inicialización ejecutados automáticamente al crear la base de datos por primera vez
-      - ../database/migrations:/docker-entrypoint-initdb.d:ro
+      # Scripts de inicialización ejecutados automáticamente al crear la base de datos por primera vez (OBS-DEP-01)
+      - ../database/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-agrocontrol_user} -d ${DB_NAME:-agrocontrol_db}"]
       interval: 10s
@@ -102,6 +102,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-agrocontrol_secret_pass_2026}
       BACKUP_DIR: /backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-agrocontrol_backup_secure_key_2026}
     volumes:
       - ../backups:/backups
       - ./scripts/backup.sh:/backup.sh:ro

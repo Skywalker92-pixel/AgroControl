@@ -14,9 +14,35 @@ async function bootstrap() {
   // Prefijo global requerido por directrices de API
   app.setGlobalPrefix('api');
 
-  // Habilitar CORS para consumo desde la SPA de la PC local y LAN
+  // Configuración de CORS con Allowlist seguro (OBS-SEC-05)
+  const isProduction = process.env.NODE_ENV === 'production';
+  const localOrigins = [
+    'http://localhost:5173',
+    'http://localhost:80',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:80',
+    'http://127.0.0.1:3000',
+  ];
+
+  const envOrigins = (process.env.CORS_ORIGINS || 'https://agro-control-eight.vercel.app')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  const allowedOrigins = Array.from(
+    new Set(isProduction ? envOrigins : [...localOrigins, ...envOrigins]),
+  );
+
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Permitir peticiones sin cabecera Origin (apps móviles nativas, CLI, curl, SSR)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Acceso bloqueado por política CORS: origen '${origin}' no autorizado.`));
+      }
+    },
     credentials: true,
   });
 

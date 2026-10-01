@@ -1,11 +1,11 @@
 @echo off
 REM ==============================================================================
-REM AGROCONTROL PRO - EJECUTAR RESTAURACION DESDE WINDOWS (HOST)
-REM Uso: restore.bat nombre_archivo_en_backups.sql.gz
+REM AGROCONTROL PRO - EJECUTAR RESTAURACION DESDE WINDOWS (HOST) (OBS-BKP-01)
+REM Uso: restore.bat nombre_archivo_en_backups.sql.gz.enc
 REM ==============================================================================
 if "%~1"=="" (
     echo [ERROR] Debe indicar el nombre del archivo de backup.
-    echo Ejemplo: restore.bat agrocontrol_backup_20260929_160000.sql.gz
+    echo Ejemplo: restore.bat agrocontrol_backup_20260930_230000.sql.gz.enc
     exit /b 1
 )
 

@@ -11,6 +11,7 @@ import {
   UseGuards,
   Headers,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { SincronizacionService } from './sincronizacion.service';
 import { RegistrarDispositivoDto } from './dto/registrar-dispositivo.dto';
@@ -104,8 +105,10 @@ export class SincronizacionController {
   /**
    * 3. Sincronización Ascendente por Lotes (PUSH: Móvil -> PC).
    * Motor Idempotente con UUIDs de cliente, doble timestamp y máquina de estados.
+   * Rate limiting operativo: 30 peticiones por minuto por IP (OBS-SEC-06).
    */
   @Post('push')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @UseGuards(AppVersionGuard, DispositivoActivoGuard)
   @Roles(
     RolUsuario.ADMINISTRADOR_PROPIETARIO,
