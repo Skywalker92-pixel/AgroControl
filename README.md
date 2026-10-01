@@ -13,7 +13,7 @@ Control de inventario · Distribución en ruta · Sincronización offline · Aud
 
 ## Descripción
 
-AgroControl Pro es un sistema de gestión diseñado para pequeñas y medianas distribuidoras agropecuarias que operan con personal de ventas y reparto en ruta. Permite controlar el inventario mediante Kárdex inmutable, gestionar cargas de distribución y liquidaciones, y sincronizar de forma bidireccional e idempotente las ventas realizadas en campo (sin cobertura celular) con la base de datos central.
+AgroControl Pro es un sistema de gestión diseñado para pequeñas y medianas distribuidoras agropecuarias que operan con personal de ventas y reparto en ruta. Permite controlar el inventario mediante Kárdex inmutable, gestionar cargas de distribución y liquidaciones, y sincronizar de forma bidireccional e idempotente las ventas realizadas en campo (sin cobertura celular) con la base de datos centrale.
 
 El sistema consta de:
 - **Aplicación administrativa en PC** (navegador web) — para el administrador, propietario y operadores de almacén.
