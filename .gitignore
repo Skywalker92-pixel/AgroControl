@@ -36,9 +36,15 @@ out/
 backups/                # Los backups viven fuera del repo (regla 3-2-1)
 *.dump
 *.sql.gz
+*.sql.gz.enc
+*.enc
 pgdata/
 .postgres/
 database/data/
+
+# ── Documentación y Auditorías Confidenciales (Uso Interno / Privado) ─────────
+docs/
+SKILL/
 
 # ── Logs del sistema ──────────────────────────────────────────────────────────
 logs/
