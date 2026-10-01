@@ -57,6 +57,9 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       DISPATCH_STOCK_DEDUCT_EVENT: ${DISPATCH_STOCK_DEDUCT_EVENT:-DESPACHADO}
       METODO_VALORIZACION_DEFAULT: ${METODO_VALORIZACION_DEFAULT:-PROMEDIO_PONDERADO}
+      BACKUPS_DIR: ${BACKUPS_DIR:-/app/backups}
+    volumes:
+      - ../backups:/app/backups:ro
     ports:
       - "${HOST_API_PORT:-3000}:3000"
     networks:
