@@ -785,6 +785,12 @@ export interface DispositivoMovil {
   autorizado: boolean;
   ultima_sincronizacion?: string | null;
   creado_en?: string;
+  usuario?: {
+    id: string;
+    nombre_completo: string;
+    username: string;
+    rol: string;
+  } | null;
 }
 
 export interface ItemCargaMovil {

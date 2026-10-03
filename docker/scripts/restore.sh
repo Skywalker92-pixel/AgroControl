@@ -11,6 +11,7 @@ if [ -z "${BACKUP_ENCRYPTION_KEY}" ]; then
     exit 1
 fi
 ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
+BACKUP_FILE="${1:-$BACKUP_FILE}"
 
 if [ -z "$BACKUP_FILE" ]; then
     echo "ERROR: Debe especificar la ruta del archivo de respaldo a restaurar."

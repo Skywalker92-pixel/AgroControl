@@ -79,6 +79,63 @@ export class SincronizacionController {
   }
 
   /**
+   * 1.2 Listado Administrativo de Terminales Móviles (OBS-MOB-01).
+   */
+  @Get('dispositivos')
+  @Roles(
+    RolUsuario.ADMINISTRADOR_PROPIETARIO,
+    RolUsuario.ADMINISTRADOR_SECUNDARIO,
+  )
+  listarDispositivos(
+    @Query('estado') estado?: string,
+    @Query('busqueda') busqueda?: string,
+  ) {
+    return this.sincronizacionService.listarDispositivos(estado, busqueda);
+  }
+
+  /**
+   * 1.3 Revocación de Autorización de Terminal Móvil (OBS-MOB-01).
+   */
+  @Patch('dispositivos/:id/revocar')
+  @Roles(
+    RolUsuario.ADMINISTRADOR_PROPIETARIO,
+    RolUsuario.ADMINISTRADOR_SECUNDARIO,
+  )
+  revocarDispositivo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') usuarioId: string,
+    @ClientIp() ipOrigen: string,
+  ) {
+    return this.sincronizacionService.revocarDispositivo(
+      id,
+      usuarioId,
+      ipOrigen,
+    );
+  }
+
+  /**
+   * 1.4 Alternar Estado Activo/Inactivo de Terminal Móvil (OBS-MOB-01).
+   */
+  @Patch('dispositivos/:id/estado')
+  @Roles(
+    RolUsuario.ADMINISTRADOR_PROPIETARIO,
+    RolUsuario.ADMINISTRADOR_SECUNDARIO,
+  )
+  alternarEstadoDispositivo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('activo') activo: boolean,
+    @CurrentUser('id') usuarioId: string,
+    @ClientIp() ipOrigen: string,
+  ) {
+    return this.sincronizacionService.alternarEstadoDispositivo(
+      id,
+      activo,
+      usuarioId,
+      ipOrigen,
+    );
+  }
+
+  /**
    * 2. Sincronización Descendente Incremental (PULL: PC -> Móvil).
    * Valida versión mínima requerida (426 Upgrade Required) y estado activo del terminal.
    */

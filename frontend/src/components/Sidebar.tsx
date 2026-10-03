@@ -117,6 +117,24 @@ export const Sidebar: React.FC = () => {
         'OPERADOR_ALMACEN',
       ],
     },
+    {
+      to: '/dispositivos',
+      label: 'Terminales Móviles',
+      icon: Smartphone,
+      roles: [
+        'ADMINISTRADOR_PROPIETARIO',
+        'ADMINISTRADOR_SECUNDARIO',
+      ],
+    },
+    {
+      to: '/usuarios',
+      label: 'Gestión de Usuarios',
+      icon: ShieldCheck,
+      roles: [
+        'ADMINISTRADOR_PROPIETARIO',
+        'ADMINISTRADOR_SECUNDARIO',
+      ],
+    },
   ];
 
 

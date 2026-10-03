@@ -80,6 +80,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: 10. Compilar Frontend (TypeScript + Vite)
+      - name: 10. Verificar Tipado Estricto de TypeScript en Frontend (OBS-QA-01)
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: 11. Compilar Frontend (TypeScript + Vite PWA)
         working-directory: frontend
         run: npm run build

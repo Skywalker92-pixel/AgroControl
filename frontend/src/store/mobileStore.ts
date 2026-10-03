@@ -309,11 +309,12 @@ export const useMobileStore = create<MobileState>((set, get) => {
           operaciones: pendientes.map((op) => ({
             id: op.id,
             tipo_operacion: op.tipo_operacion,
-            carga_distribucion_id: op.carga_distribucion_id,
-            cliente_id: op.cliente_id,
+            carga_distribucion_id: op.carga_distribucion_id || undefined,
+            cliente_id: op.cliente_id || undefined,
             fecha_operacion: op.fecha_operacion,
-            total: op.total,
-            detalles: op.detalles.map((d) => ({
+            total: op.total || 0,
+            datos: (op as any).payload || (op as any).datos,
+            detalles: (op.detalles || []).map((d) => ({
               producto_id: d.producto_id,
               presentacion_id: d.presentacion_id || undefined,
               cantidad: d.cantidad,
@@ -335,6 +336,16 @@ export const useMobileStore = create<MobileState>((set, get) => {
         const mapaResultados = new Map(res.resultados.map((r) => [r.id, r]));
         const timestampNow = new Date().toISOString();
 
+        // Actualizar clientes locales si el servidor devolvió un ID definitivo
+        let clientesLocales = get().clientes;
+        res.resultados.forEach((r: any) => {
+          if (r.tipo_operacion === 'CLIENTE_NUEVO' && r.cliente_id && r.cliente_local_id) {
+            clientesLocales = clientesLocales.map((c) =>
+              c.id === r.cliente_local_id ? { ...c, id: r.cliente_id } : c,
+            );
+          }
+        });
+
         const colaActualizada = colaOperaciones.map((op) => {
           const resultado = mapaResultados.get(op.id);
           if (resultado) {
@@ -355,6 +366,7 @@ export const useMobileStore = create<MobileState>((set, get) => {
         await actualizarColaIndexedDB(colaActualizada);
 
         set({
+          clientes: clientesLocales,
           colaOperaciones: colaActualizada,
           isSyncing: false,
           syncError: null,
@@ -470,7 +482,7 @@ export const useMobileStore = create<MobileState>((set, get) => {
     },
 
     registrarClienteRapido: async ({ numero_documento, razon_social, direccion, telefono }) => {
-      const { clientes, listasPrecios } = get();
+      const { clientes, listasPrecios, colaOperaciones, isOnline, ejecutarPush } = get();
 
       // Lista de precio por defecto (PRIMERA DISPONIBLE O DEFAULT)
       const listaDefectoId = listasPrecios[0]?.id || '00000000-0000-0000-0000-000000000001';
@@ -489,14 +501,47 @@ export const useMobileStore = create<MobileState>((set, get) => {
       // Guardar en IndexedDB
       await guardarClienteIndexedDB(nuevoCliente);
 
-      const clientesActualizados = [nuevoCliente, ...clientes];
-      set({ clientes: clientesActualizados });
+      // Encolar operación de sincronización explícita CLIENTE_NUEVO (OBS-MOB-03)
+      const opCliente: OperacionSyncLocal = {
+        id: generarUUID(),
+        tipo_operacion: 'CLIENTE_NUEVO' as any,
+        carga_distribucion_id: get().cargaActiva?.id || '',
+        cliente_id: nuevoCliente.id,
+        fecha_operacion: new Date().toISOString(),
+        total: 0,
+        detalles: [],
+        observaciones: `Cliente nuevo registrado en ruta: ${razon_social}`,
+        estado_local: 'PENDIENTE',
+        reintentos: 0,
+        creado_en: new Date().toISOString(),
+        payload: {
+          cliente_local_id: nuevoCliente.id,
+          tipo_documento: nuevoCliente.tipo_documento,
+          numero_documento: nuevoCliente.numero_documento,
+          razon_social: nuevoCliente.razon_social,
+          direccion: nuevoCliente.direccion,
+          telefono: nuevoCliente.telefono,
+          lista_precio_id: nuevoCliente.lista_precio_id,
+        },
+      } as any;
 
-      // Si hay conexión, intentar registrar en central en background
-      if (get().isOnline) {
-        clientesApi.crear(nuevoCliente).catch((err) => {
-          console.warn('Cliente creado en IndexedDB local, sincronización posterior:', err.message);
-        });
+      const colaActualizada = [opCliente, ...colaOperaciones];
+      const clientesActualizados = [nuevoCliente, ...clientes];
+
+      set({
+        clientes: clientesActualizados,
+        colaOperaciones: colaActualizada,
+      });
+
+      await actualizarColaIndexedDB(colaActualizada);
+
+      // Si hay conexión, intentar sincronizar de inmediato
+      if (isOnline) {
+        setTimeout(() => {
+          ejecutarPush().catch((err) => {
+            console.log('Cliente encolado localmente. Sincronización diferida:', err.message);
+          });
+        }, 100);
       }
 
       return nuevoCliente;

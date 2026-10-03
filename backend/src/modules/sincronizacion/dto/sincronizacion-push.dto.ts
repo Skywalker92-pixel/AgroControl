@@ -45,10 +45,10 @@ export class OperacionSyncDto {
   id: string;
 
   @IsNotEmpty({ message: 'El tipo de operación es obligatorio' })
-  @IsIn(['VENTA', 'COBRO', 'DEVOLUCION', 'SOBRANTE', 'PEDIDO'], {
-    message: 'El tipo de operación debe ser VENTA, COBRO, DEVOLUCION, SOBRANTE o PEDIDO',
+  @IsIn(['VENTA', 'COBRO', 'DEVOLUCION', 'SOBRANTE', 'PEDIDO', 'CLIENTE_NUEVO'], {
+    message: 'El tipo de operación debe ser VENTA, COBRO, DEVOLUCION, SOBRANTE, PEDIDO o CLIENTE_NUEVO',
   })
-  tipo_operacion: 'VENTA' | 'COBRO' | 'DEVOLUCION' | 'SOBRANTE' | 'PEDIDO';
+  tipo_operacion: 'VENTA' | 'COBRO' | 'DEVOLUCION' | 'SOBRANTE' | 'PEDIDO' | 'CLIENTE_NUEVO';
 
   @IsOptional()
   @IsUUIDCustom({ message: 'El carga_distribucion_id debe ser un UUID válido' })
@@ -76,6 +76,9 @@ export class OperacionSyncDto {
   @IsOptional()
   @IsString({ message: 'Las observaciones deben ser texto' })
   observaciones?: string;
+
+  @IsOptional()
+  datos?: Record<string, any>;
 
   @IsOptional()
   metadatos?: Record<string, any>;

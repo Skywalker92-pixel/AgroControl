@@ -51,6 +51,9 @@ export const Catalogo: React.FC = () => {
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 
   const esVendedor = usuario?.rol === 'VENDEDOR';
+  const puedeGestionarPrecios =
+    usuario?.rol === 'ADMINISTRADOR_PROPIETARIO' ||
+    usuario?.rol === 'ADMINISTRADOR_SECUNDARIO';
 
   const cargarDatos = async () => {
     setIsLoading(true);
@@ -108,8 +111,7 @@ export const Catalogo: React.FC = () => {
     if (!productoSeleccionado) return;
     setMensaje(null);
     try {
-      await catalogoApi.crearPresentacion({
-        producto_id: productoSeleccionado.id,
+      await catalogoApi.crearPresentacion(productoSeleccionado.id, {
         nombre: formPres.nombre.trim(),
         factor: Number(formPres.factor),
       });
@@ -304,15 +306,17 @@ export const Catalogo: React.FC = () => {
                         >
                           + Presentación
                         </button>
-                        <button
-                          onClick={() => {
-                            setProductoSeleccionado(prod);
-                            setModalAsignarPrecio(true);
-                          }}
-                          className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors"
-                        >
-                          $ Asignar Precio
-                        </button>
+                        {puedeGestionarPrecios && (
+                          <button
+                            onClick={() => {
+                              setProductoSeleccionado(prod);
+                              setModalAsignarPrecio(true);
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors"
+                          >
+                            $ Asignar Precio
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>

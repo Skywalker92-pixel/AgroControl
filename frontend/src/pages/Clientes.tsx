@@ -12,8 +12,15 @@ import {
 } from 'lucide-react';
 import { clientesApi, catalogoApi } from '../api/services';
 import { Cliente } from '../types';
+import { useAuthStore } from '../store/authStore';
 
 export const Clientes: React.FC = () => {
+  const usuario = useAuthStore((state) => state.usuario);
+  const puedeCrearCliente =
+    usuario?.rol === 'ADMINISTRADOR_PROPIETARIO' ||
+    usuario?.rol === 'ADMINISTRADOR_SECUNDARIO' ||
+    usuario?.rol === 'VENDEDOR';
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [listasPrecio, setListasPrecio] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState('');
@@ -110,16 +117,18 @@ export const Clientes: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setModalNuevo(true);
-            setFeedback(null);
-          }}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-2 shadow-sm transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Nuevo Cliente
-        </button>
+        {puedeCrearCliente && (
+          <button
+            onClick={() => {
+              setModalNuevo(true);
+              setFeedback(null);
+            }}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-2 shadow-sm transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Cliente
+          </button>
+        )}
       </div>
 
       {feedback && (

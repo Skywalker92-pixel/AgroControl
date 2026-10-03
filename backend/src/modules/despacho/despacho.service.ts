@@ -551,7 +551,11 @@ export class DespachoService {
     };
   }
 
-  async consultarProformas(dto: ConsultarProformasDto) {
+  async consultarProformas(
+    dto: ConsultarProformasDto,
+    usuarioId?: string,
+    usuarioRol?: string,
+  ) {
     const page = Math.max(1, dto.page || 1);
     const limit = Math.min(100, Math.max(1, dto.limit || 50));
     const skip = (page - 1) * limit;
@@ -565,6 +569,11 @@ export class DespachoService {
         lte: dto.fecha_hasta ? new Date(dto.fecha_hasta) : undefined,
       },
     };
+
+    // OBS-AUTHZ-01: Si el usuario es VENDEDOR, restringir a sus propias proformas
+    if (usuarioRol === 'VENDEDOR' && usuarioId) {
+      where.creado_por = usuarioId;
+    }
 
     const [total, items] = await Promise.all([
       this.prisma.proforma.count({ where }),

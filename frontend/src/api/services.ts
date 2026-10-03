@@ -74,16 +74,26 @@ export const catalogoApi = {
     const { data } = await apiClient.post<Producto>('/productos', datos);
     return data;
   },
-  crearPresentacion: async (datos: any) => {
-    const { data } = await apiClient.post('/presentaciones', datos);
+  crearPresentacion: async (
+    productoId: string,
+    datos: { nombre: string; factor: number },
+  ) => {
+    const { data } = await apiClient.post(
+      `/productos/${productoId}/presentaciones`,
+      datos,
+    );
     return data;
   },
   listarListasPrecio: async () => {
-    const { data } = await apiClient.get('/precios/listas');
+    const { data } = await apiClient.get('/listas-precio');
     return data;
   },
-  asignarPrecio: async (datos: any) => {
-    const { data } = await apiClient.post('/precios/asignar', datos);
+  asignarPrecio: async (datos: {
+    producto_id: string;
+    lista_precio_id: string;
+    precio: number;
+  }) => {
+    const { data } = await apiClient.post('/precios', datos);
     return data;
   },
   consultarPrecioCliente: async (clienteId: string, productoId: string) => {
@@ -248,6 +258,33 @@ export const usuariosApi = {
     const { data } = await apiClient.get<Usuario[]>('/usuarios');
     return data;
   },
+  listarTrabajadoresActivos: async (): Promise<Usuario[]> => {
+    const { data } = await apiClient.get<Usuario[]>('/usuarios/trabajadores-activos');
+    return data;
+  },
+  crear: async (datos: any): Promise<Usuario> => {
+    const { data } = await apiClient.post<Usuario>('/usuarios', datos);
+    return data;
+  },
+  actualizar: async (id: string, datos: any): Promise<Usuario> => {
+    const { data } = await apiClient.patch<Usuario>(`/usuarios/${id}`, datos);
+    return data;
+  },
+  cambiarRol: async (id: string, rol: string): Promise<Usuario> => {
+    const { data } = await apiClient.patch<Usuario>(`/usuarios/${id}/rol`, { rol });
+    return data;
+  },
+  cambiarEstado: async (id: string, activo: boolean): Promise<Usuario> => {
+    const { data } = await apiClient.patch<Usuario>(`/usuarios/${id}/estado`, { activo });
+    return data;
+  },
+  resetPassword: async (id: string, password: string): Promise<{ mensaje: string }> => {
+    const { data } = await apiClient.post<{ mensaje: string }>(
+      `/usuarios/${id}/reset-password`,
+      { password },
+    );
+    return data;
+  },
 };
 
 export const distribucionApi = {
@@ -331,6 +368,32 @@ export const liquidacionesApi = {
 };
 
 export const syncApi = {
+  listarDispositivos: async (params?: {
+    estado?: string;
+    busqueda?: string;
+  }): Promise<DispositivoMovil[]> => {
+    const { data } = await apiClient.get<DispositivoMovil[]>('/sync/dispositivos', { params });
+    return data;
+  },
+  autorizarDispositivo: async (
+    id: string,
+  ): Promise<{ mensaje: string; dispositivo: DispositivoMovil }> => {
+    const { data } = await apiClient.patch(`/sync/dispositivos/${id}/autorizar`);
+    return data;
+  },
+  revocarDispositivo: async (
+    id: string,
+  ): Promise<{ mensaje: string; dispositivo: DispositivoMovil }> => {
+    const { data } = await apiClient.patch(`/sync/dispositivos/${id}/revocar`);
+    return data;
+  },
+  alternarEstadoDispositivo: async (
+    id: string,
+    activo: boolean,
+  ): Promise<{ mensaje: string; dispositivo: DispositivoMovil }> => {
+    const { data } = await apiClient.patch(`/sync/dispositivos/${id}/estado`, { activo });
+    return data;
+  },
   registrarDispositivo: async (
     datos: Partial<DispositivoMovil>,
   ): Promise<{ mensaje: string; dispositivo: DispositivoMovil }> => {

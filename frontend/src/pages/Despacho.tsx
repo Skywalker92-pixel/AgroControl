@@ -83,6 +83,7 @@ export const Despacho: React.FC = () => {
   const [itemActualCajas, setItemActualCajas] = useState(0);
   const [itemActualSueltas, setItemActualSueltas] = useState(0);
   const [precioSugerido, setPrecioSugerido] = useState<number | undefined>();
+  const [errorPrecio, setErrorPrecio] = useState<string | null>(null);
   const [stockDispItem, setStockDispItem] = useState<number | undefined>();
 
   const [feedback, setFeedback] = useState<{
@@ -121,12 +122,20 @@ export const Despacho: React.FC = () => {
 
   useEffect(() => {
     if (clienteId && itemActualProdId) {
+      setErrorPrecio(null);
       catalogoApi
         .consultarPrecioCliente(clienteId, itemActualProdId)
         .then((data) => {
-          setPrecioSugerido(Number(data.precio));
+          setPrecioSugerido(Number(data.precio_unitario));
+          setErrorPrecio(null);
         })
-        .catch(() => setPrecioSugerido(undefined));
+        .catch((err) => {
+          setPrecioSugerido(undefined);
+          const msg =
+            err.response?.data?.message ||
+            'Este producto no tiene un precio configurado para la lista de precios del cliente seleccionado.';
+          setErrorPrecio(msg);
+        });
 
       stockApi
         .consultar(almacenActivo?.id, itemActualProdId)
@@ -136,6 +145,7 @@ export const Despacho: React.FC = () => {
         .catch(() => setStockDispItem(0));
     } else {
       setPrecioSugerido(undefined);
+      setErrorPrecio(null);
       setStockDispItem(undefined);
     }
   }, [clienteId, itemActualProdId, almacenActivo?.id]);
@@ -201,7 +211,12 @@ export const Despacho: React.FC = () => {
         ubicacion_id: almacenActivo?.id,
         observaciones,
         estado_inicial: estadoInicial,
-        items: itemsProforma,
+        items: itemsProforma.map((it) => ({
+          producto_id: it.producto_id,
+          presentacion_id: it.presentacion_id || undefined,
+          cantidad_presentacion: it.cantidad_presentacion || 0,
+          unidades_sueltas: it.unidades_sueltas || 0,
+        })),
       });
 
       setFeedback({
@@ -613,6 +628,21 @@ export const Despacho: React.FC = () => {
                     unidadBase={productoActivoObj.unidad_base}
                     stockDisponible={stockDispItem}
                   />
+                )}
+
+                {/* Mensaje informativo si el producto no tiene precio asignado */}
+                {clienteId && itemActualProdId && precioSugerido === undefined && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-semibold">
+                        {errorPrecio || 'Este producto no tiene un precio asignado en la lista de precios del cliente seleccionado.'}
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        El botón para añadir ítems permanecerá inhabilitado hasta que se configure el precio en el catálogo.
+                      </p>
+                    </div>
+                  </div>
                 )}
 
                 <div className="flex justify-end">

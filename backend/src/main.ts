@@ -4,9 +4,22 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret || jwtSecret.length < 16) {
-    throw new Error('FATAL: JWT_SECRET no configurado en entorno');
+    throw new Error('FATAL: JWT_SECRET no configurado o es demasiado corto (mínimo 16 caracteres)');
+  }
+  if (isProduction && (jwtSecret.includes('agrocontrol_secret_pass') || jwtSecret.includes('super_seguro_jwt_secret'))) {
+    throw new Error('FATAL: No se permite usar valores de JWT_SECRET por defecto de prueba en entorno de producción.');
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error('FATAL: DATABASE_URL no configurada en variables de entorno.');
+  }
+
+  if (isProduction && (!process.env.CORS_ORIGINS || process.env.CORS_ORIGINS.includes('*'))) {
+    throw new Error('FATAL: CORS_ORIGINS debe configurarse explícitamente y sin comodines (*) en producción.');
   }
 
   const logger = new Logger('Bootstrap');
@@ -19,7 +32,6 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Configuración de CORS con Allowlist seguro (OBS-SEC-05)
-  const isProduction = process.env.NODE_ENV === 'production';
   const localOrigins = [
     'http://localhost:5173',
     'http://localhost:80',

@@ -13,6 +13,8 @@ import { Clientes } from './pages/Clientes';
 import { Reportes } from './pages/Reportes';
 import { Distribucion } from './pages/Distribucion';
 import { OperacionesObservadas } from './pages/OperacionesObservadas';
+import { DispositivosMoviles } from './pages/DispositivosMoviles';
+import { Usuarios } from './pages/Usuarios';
 
 // Módulos Móviles Offline-First (HITO 12 - MOD-M01 al MOD-M07)
 import { MovilLayout } from './components/movil/MovilLayout';
@@ -44,7 +46,18 @@ export const App: React.FC = () => {
           {/* ================================================================= */}
           {/* SUPERFICIE MÓVIL: VENDEDORES Y REPARTIDORES EN RUTA (HITO 12)       */}
           {/* ================================================================= */}
-          <Route path="/movil" element={<ProtectedRoute />}>
+          <Route
+            path="/movil"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  'VENDEDOR',
+                  'ADMINISTRADOR_PROPIETARIO',
+                  'ADMINISTRADOR_SECUNDARIO',
+                ]}
+              />
+            }
+          >
             <Route element={<MovilLayout />}>
               <Route index element={<Navigate to="/movil/carga" replace />} />
               <Route path="carga" element={<MiCarga />} />
@@ -94,6 +107,32 @@ export const App: React.FC = () => {
                 }
               >
                 <Route index element={<OperacionesObservadas />} />
+              </Route>
+              <Route
+                path="/dispositivos"
+                element={
+                  <ProtectedRoute
+                    allowedRoles={[
+                      'ADMINISTRADOR_PROPIETARIO',
+                      'ADMINISTRADOR_SECUNDARIO',
+                    ]}
+                  />
+                }
+              >
+                <Route index element={<DispositivosMoviles />} />
+              </Route>
+              <Route
+                path="/usuarios"
+                element={
+                  <ProtectedRoute
+                    allowedRoles={[
+                      'ADMINISTRADOR_PROPIETARIO',
+                      'ADMINISTRADOR_SECUNDARIO',
+                    ]}
+                  />
+                }
+              >
+                <Route index element={<Usuarios />} />
               </Route>
             </Route>
           </Route>

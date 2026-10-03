@@ -221,7 +221,7 @@ export const Distribucion: React.FC = () => {
         distribucionApi.listarCargas(),
         liquidacionesApi.listar().catch(() => ({ total: 0, items: [] })),
         distribucionApi.obtenerBodegasMoviles(),
-        usuariosApi.listar().catch(() => []),
+        usuariosApi.listarTrabajadoresActivos().catch(() => []),
         ubicacionesApi.listar().catch(() => []),
         catalogoApi.listarProductos().catch(() => []),
       ]);

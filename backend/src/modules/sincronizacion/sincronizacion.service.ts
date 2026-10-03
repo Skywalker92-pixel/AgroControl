@@ -10,7 +10,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { RegistrarDispositivoDto } from './dto/registrar-dispositivo.dto';
 import { SincronizacionPullDto } from './dto/sincronizacion-pull.dto';
-import { SincronizacionPushDto, OperacionSyncDto } from './dto/sincronizacion-push.dto';
+import { SincronizacionPushDto } from './dto/sincronizacion-push.dto';
 import { ConsultarOperacionesObservadasDto } from './dto/consultar-operaciones-observadas.dto';
 import {
   ResolverOperacionObservadaDto,
@@ -210,6 +210,125 @@ export class SincronizacionService {
 
     return {
       mensaje: 'Dispositivo móvil autorizado exitosamente.',
+      dispositivo: actualizado,
+    };
+  }
+
+  /**
+   * 1.2 Listado de Terminales Móviles para Administración (OBS-MOB-01).
+   */
+  async listarDispositivos(filtroEstado?: string, busqueda?: string) {
+    const where: any = {};
+    if (filtroEstado === 'PENDIENTE') {
+      where.autorizado = false;
+      where.activo = true;
+    } else if (filtroEstado === 'AUTORIZADO') {
+      where.autorizado = true;
+      where.activo = true;
+    } else if (filtroEstado === 'INACTIVO') {
+      where.activo = false;
+    }
+
+    if (busqueda) {
+      where.OR = [
+        { codigo_dispositivo: { contains: busqueda, mode: 'insensitive' } },
+        { modelo: { contains: busqueda, mode: 'insensitive' } },
+        { usuario: { nombre_completo: { contains: busqueda, mode: 'insensitive' } } },
+      ];
+    }
+
+    return this.prisma.dispositivo_movil.findMany({
+      where,
+      include: {
+        usuario: {
+          select: { id: true, nombre_completo: true, username: true, rol: true },
+        },
+      },
+      orderBy: { creado_en: 'desc' },
+    });
+  }
+
+  /**
+   * 1.3 Revocación de Autorización de Terminal Móvil (OBS-MOB-01).
+   */
+  async revocarDispositivo(id: string, usuarioId: string, ipOrigen: string) {
+    const dispositivo = await this.prisma.dispositivo_movil.findUnique({
+      where: { id },
+    });
+    if (!dispositivo) {
+      throw new NotFoundException(`Dispositivo móvil con ID '${id}' no encontrado.`);
+    }
+
+    const actualizado = await this.prisma.dispositivo_movil.update({
+      where: { id },
+      data: {
+        autorizado: false,
+        actualizado_en: new Date(),
+      },
+      include: {
+        usuario: {
+          select: { id: true, nombre_completo: true, username: true, rol: true },
+        },
+      },
+    });
+
+    await this.auditoriaService.registrarEvento({
+      entidad: 'dispositivo_movil',
+      registro_id: actualizado.id,
+      accion: 'UPDATE',
+      valor_anterior: dispositivo,
+      valor_nuevo: actualizado,
+      usuario_id: usuarioId,
+      ip_origen: ipOrigen,
+    });
+
+    return {
+      mensaje: 'Autorización de dispositivo móvil revocada exitosamente.',
+      dispositivo: actualizado,
+    };
+  }
+
+  /**
+   * 1.4 Alternar Estado Activo/Inactivo de Terminal Móvil (OBS-MOB-01).
+   */
+  async alternarEstadoDispositivo(
+    id: string,
+    activo: boolean,
+    usuarioId: string,
+    ipOrigen: string,
+  ) {
+    const dispositivo = await this.prisma.dispositivo_movil.findUnique({
+      where: { id },
+    });
+    if (!dispositivo) {
+      throw new NotFoundException(`Dispositivo móvil con ID '${id}' no encontrado.`);
+    }
+
+    const actualizado = await this.prisma.dispositivo_movil.update({
+      where: { id },
+      data: {
+        activo,
+        actualizado_en: new Date(),
+      },
+      include: {
+        usuario: {
+          select: { id: true, nombre_completo: true, username: true, rol: true },
+        },
+      },
+    });
+
+    await this.auditoriaService.registrarEvento({
+      entidad: 'dispositivo_movil',
+      registro_id: actualizado.id,
+      accion: 'UPDATE',
+      valor_anterior: dispositivo,
+      valor_nuevo: actualizado,
+      usuario_id: usuarioId,
+      ip_origen: ipOrigen,
+    });
+
+    return {
+      mensaje: `Dispositivo móvil ${activo ? 'activado' : 'desactivado'} exitosamente.`,
       dispositivo: actualizado,
     };
   }
@@ -458,6 +577,8 @@ export class SincronizacionService {
       motivo_observacion?: string | null;
       ya_procesado: boolean;
       mensaje?: string;
+      cliente_id?: string;
+      cliente_local_id?: string;
     }> = [];
 
     // Procesamiento ordenado e individual de cada operación dentro del batch
@@ -519,8 +640,36 @@ export class SincronizacionService {
         let estadoCalculado: 'APLICADA' | 'OBSERVADA' = 'APLICADA';
         let motivoObservacion: string | null = null;
 
+        // Validar que exista el cliente si viene cliente_id
+        if (op.cliente_id && estadoCalculado === 'APLICADA') {
+          const clienteExiste = await this.prisma.cliente.findUnique({
+            where: { id: op.cliente_id },
+          });
+
+          if (!clienteExiste) {
+            // Intentar buscar si se sincronizó previamente con un ID local temporal
+            const opPrevia = await this.prisma.operacion_sincronizada.findFirst({
+              where: {
+                tipo_operacion: 'CLIENTE_NUEVO',
+                estado_sync: 'APLICADA',
+                datos_operacion: {
+                  path: ['cliente_local_id'],
+                  equals: op.cliente_id,
+                },
+              },
+            });
+
+            if (opPrevia && (opPrevia.datos_operacion as any)?.cliente_id_servidor) {
+              op.cliente_id = (opPrevia.datos_operacion as any).cliente_id_servidor;
+            } else {
+              estadoCalculado = 'OBSERVADA';
+              motivoObservacion = `Cliente ID '${op.cliente_id}' no encontrado en el servidor. Sincronice primero el cliente nuevo.`;
+            }
+          }
+        }
+
         // Validar que exista la carga
-        if (!op.carga_distribucion_id) {
+        if (!op.carga_distribucion_id && estadoCalculado === 'APLICADA') {
           estadoCalculado = 'OBSERVADA';
           motivoObservacion = 'La venta en ruta no especifica carga_distribucion_id.';
         }
@@ -648,8 +797,208 @@ export class SincronizacionService {
             mensaje: 'Venta aplicada correctamente al Kárdex y stock de la bodega móvil.',
           });
         }
+      } else if (op.tipo_operacion === 'CLIENTE_NUEVO') {
+        // Operación de Registro de Cliente en Ruta (OBS-MOB-03)
+        const datosCli = (op as any).datos || (op as any).payload || (op as any);
+        let clienteFinal = null;
+
+        if (datosCli.tipo_documento && datosCli.numero_documento) {
+          clienteFinal = await this.prisma.cliente.findUnique({
+            where: {
+              tipo_documento_numero_documento: {
+                tipo_documento: datosCli.tipo_documento,
+                numero_documento: datosCli.numero_documento,
+              },
+            },
+          });
+        }
+
+        if (!clienteFinal) {
+          let listaId = datosCli.lista_precio_id;
+          if (!listaId) {
+            const defaultLista = await this.prisma.lista_precio.findFirst();
+            listaId = defaultLista?.id;
+          }
+
+          clienteFinal = await this.prisma.cliente.create({
+            data: {
+              tipo_documento: datosCli.tipo_documento || 'DNI',
+              numero_documento: datosCli.numero_documento,
+              razon_social: datosCli.razon_social,
+              direccion: datosCli.direccion || 'En ruta',
+              telefono: datosCli.telefono || null,
+              email: datosCli.email || null,
+              lista_precio_id: listaId,
+              activo: true,
+            },
+          });
+        }
+
+        await this.prisma.operacion_sincronizada.create({
+          data: {
+            id: op.id,
+            dispositivo_id: dispositivoId,
+            usuario_id: usuarioId,
+            carga_distribucion_id: op.carga_distribucion_id || null,
+            tipo_operacion: 'CLIENTE_NUEVO',
+            estado_sync: 'APLICADA',
+            datos_operacion: {
+              ...datosCli,
+              cliente_id_servidor: clienteFinal.id,
+            },
+            motivo_observacion: null,
+            fecha_operacion: fechaOperacionMovil,
+            fecha_registro: timestampServidor,
+            ip_origen: ipOrigen || null,
+          },
+        });
+
+        totalAplicadas++;
+        resultados.push({
+          id: op.id,
+          tipo_operacion: 'CLIENTE_NUEVO',
+          estado_sync: 'APLICADA',
+          ya_procesado: false,
+          cliente_id: clienteFinal.id,
+          cliente_local_id: datosCli.cliente_local_id,
+          mensaje: 'Cliente registrado o conciliado exitosamente.',
+        });
+      } else if (op.tipo_operacion === 'DEVOLUCION') {
+        // Efecto colateral: reingresar al saldo de la bodega móvil y registrar en Kárdex
+        if (cargaAsociada && op.detalles && op.detalles.length > 0) {
+          for (const item of op.detalles) {
+            await this.prisma.stock_saldo.upsert({
+              where: {
+                producto_id_ubicacion_id: {
+                  producto_id: item.producto_id,
+                  ubicacion_id: cargaAsociada.bodega_movil_id,
+                },
+              },
+              update: {
+                cantidad_fisica: { increment: item.cantidad },
+                actualizado_en: timestampServidor,
+              },
+              create: {
+                producto_id: item.producto_id,
+                ubicacion_id: cargaAsociada.bodega_movil_id,
+                cantidad_fisica: item.cantidad,
+                cantidad_reservada: 0,
+              },
+            });
+
+            await this.prisma.movimiento_kardex.create({
+              data: {
+                id: randomUUID(),
+                producto_id: item.producto_id,
+                ubicacion_id: cargaAsociada.bodega_movil_id,
+                tipo: 'DEVOLUCION_RUTA',
+                cantidad_base: item.cantidad,
+                costo_unitario: item.precio_unitario || 0,
+                documento_tipo: 'DEVOLUCION_RUTA',
+                documento_id: op.id,
+                motivo: `Devolución en ruta aplicada a carga ${cargaAsociada.codigo || ''}`,
+                usuario_id: usuarioId,
+                dispositivo_id: dispositivoId,
+                fecha_operacion: fechaOperacionMovil,
+                fecha_registro: timestampServidor,
+              },
+            });
+          }
+        }
+
+        await this.prisma.operacion_sincronizada.create({
+          data: {
+            id: op.id,
+            dispositivo_id: dispositivoId,
+            usuario_id: usuarioId,
+            carga_distribucion_id: op.carga_distribucion_id || null,
+            tipo_operacion: 'DEVOLUCION',
+            estado_sync: 'APLICADA',
+            datos_operacion: op as any,
+            motivo_observacion: null,
+            fecha_operacion: fechaOperacionMovil,
+            fecha_registro: timestampServidor,
+            ip_origen: ipOrigen || null,
+          },
+        });
+
+        totalAplicadas++;
+        resultados.push({
+          id: op.id,
+          tipo_operacion: 'DEVOLUCION',
+          estado_sync: 'APLICADA',
+          ya_procesado: false,
+          mensaje: 'Devolución aplicada al stock y Kárdex de la bodega móvil.',
+        });
+      } else if (op.tipo_operacion === 'SOBRANTE') {
+        // Efecto colateral: ajuste positivo en la bodega móvil y Kárdex
+        if (cargaAsociada && op.detalles && op.detalles.length > 0) {
+          for (const item of op.detalles) {
+            await this.prisma.stock_saldo.upsert({
+              where: {
+                producto_id_ubicacion_id: {
+                  producto_id: item.producto_id,
+                  ubicacion_id: cargaAsociada.bodega_movil_id,
+                },
+              },
+              update: {
+                cantidad_fisica: { increment: item.cantidad },
+                actualizado_en: timestampServidor,
+              },
+              create: {
+                producto_id: item.producto_id,
+                ubicacion_id: cargaAsociada.bodega_movil_id,
+                cantidad_fisica: item.cantidad,
+                cantidad_reservada: 0,
+              },
+            });
+
+            await this.prisma.movimiento_kardex.create({
+              data: {
+                id: randomUUID(),
+                producto_id: item.producto_id,
+                ubicacion_id: cargaAsociada.bodega_movil_id,
+                tipo: 'SOBRANTE_RUTA',
+                cantidad_base: item.cantidad,
+                costo_unitario: item.precio_unitario || 0,
+                documento_tipo: 'SOBRANTE_RUTA',
+                documento_id: op.id,
+                motivo: `Sobrante reportado en ruta: ${op.observaciones || 'Ajuste operativo'}`,
+                usuario_id: usuarioId,
+                dispositivo_id: dispositivoId,
+                fecha_operacion: fechaOperacionMovil,
+                fecha_registro: timestampServidor,
+              },
+            });
+          }
+        }
+
+        await this.prisma.operacion_sincronizada.create({
+          data: {
+            id: op.id,
+            dispositivo_id: dispositivoId,
+            usuario_id: usuarioId,
+            carga_distribucion_id: op.carga_distribucion_id || null,
+            tipo_operacion: 'SOBRANTE',
+            estado_sync: 'APLICADA',
+            datos_operacion: op as any,
+            motivo_observacion: null,
+            fecha_operacion: fechaOperacionMovil,
+            fecha_registro: timestampServidor,
+            ip_origen: ipOrigen || null,
+          },
+        });
+
+        totalAplicadas++;
+        resultados.push({
+          id: op.id,
+          tipo_operacion: 'SOBRANTE',
+          estado_sync: 'APLICADA',
+          ya_procesado: false,
+          mensaje: 'Sobrante registrado con ajuste en el Kárdex de la bodega móvil.',
+        });
       } else {
-        // Operaciones de Cobro, Devolución, Sobrante o Pedido
+        // COBRO, PEDIDO u otras operaciones
         await this.prisma.operacion_sincronizada.create({
           data: {
             id: op.id,
@@ -666,13 +1015,28 @@ export class SincronizacionService {
           },
         });
 
+        if (op.tipo_operacion === 'COBRO') {
+          await this.auditoriaService.registrarEvento({
+            entidad: 'cobro_movil',
+            registro_id: op.id,
+            accion: 'INSERT',
+            valor_nuevo: {
+              carga_distribucion_id: op.carga_distribucion_id,
+              monto: op.total || (op as any).monto,
+              metodo_pago: (op as any).metadatos?.metodo_pago,
+            },
+            usuario_id: usuarioId,
+            ip_origen: ipOrigen,
+          });
+        }
+
         totalAplicadas++;
         resultados.push({
           id: op.id,
           tipo_operacion: op.tipo_operacion,
           estado_sync: 'APLICADA',
           ya_procesado: false,
-          mensaje: `Operación ${op.tipo_operacion} registrada exitosamente.`,
+          mensaje: `Operación ${op.tipo_operacion} procesada exitosamente.`,
         });
       }
     }

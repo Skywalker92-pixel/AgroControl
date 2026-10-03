@@ -49,8 +49,12 @@ export class DespachoController {
   }
 
   @Get()
-  consultarProformas(@Query() dto: ConsultarProformasDto) {
-    return this.despachoService.consultarProformas(dto);
+  consultarProformas(
+    @Query() dto: ConsultarProformasDto,
+    @CurrentUser('id') usuarioId: string,
+    @CurrentUser('rol') usuarioRol: string,
+  ) {
+    return this.despachoService.consultarProformas(dto, usuarioId, usuarioRol);
   }
 
   @Get(':id')
