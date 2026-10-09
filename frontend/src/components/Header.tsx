@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
-import { Warehouse, LogOut, User, Bell, ChevronDown } from 'lucide-react';
+import { Warehouse, LogOut, User, ChevronDown, Menu } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { ubicacionesApi } from '../api/services';
 
-export const Header: React.FC = () => {
+export const Header: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) => {
   const { usuario, logout } = useAuthStore();
   const { almacenActivo, almacenes, setAlmacenActivo, setAlmacenes } =
     useWarehouseStore();
@@ -21,34 +21,56 @@ export const Header: React.FC = () => {
   const rolLabels: Record<string, { label: string; color: string }> = {
     ADMINISTRADOR_PROPIETARIO: {
       label: 'Propietario / Admin',
-      color: 'bg-purple-100 text-purple-800 border-purple-200',
+      color: 'bg-transparent text-[#7a9382]',
     },
     ADMINISTRADOR_SECUNDARIO: {
       label: 'Admin Secundario',
-      color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      color: 'bg-transparent text-[#7a9382]',
     },
     OPERADOR_ALMACEN: {
       label: 'Operador Almacén',
-      color: 'bg-amber-100 text-amber-800 border-amber-200',
+      color: 'bg-transparent text-[#7a9382]',
     },
     VENDEDOR: {
       label: 'Vendedor',
-      color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      color: 'bg-transparent text-[#7a9382]',
     },
   };
 
   const rolInfo = usuario?.rol
-    ? rolLabels[usuario.rol] || { label: usuario.rol, color: 'bg-slate-100 text-slate-800' }
+    ? rolLabels[usuario.rol] || { label: usuario.rol, color: 'text-[#7a9382]' }
     : { label: '', color: '' };
 
   return (
-    <header className="bg-white border-b border-slate-200 h-16 px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+    <header className="bg-transparent lg:h-24 px-4 lg:px-8 flex flex-col lg:flex-row items-stretch lg:items-center justify-between sticky top-0 z-30 pt-4 pb-2 gap-4">
+      
+      {/* Fila superior en móvil: Hamburguesa + Usuario resumido */}
+      <div className="w-full flex items-center justify-between lg:hidden">
+        <button 
+          onClick={onMenuClick}
+          className="p-3 bg-white rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.02)] text-[#3b5e47] border border-[#dce5df] hover:bg-[#eef3ef]"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+
+        <div className="flex items-center gap-3 bg-white border border-[#dce5df] rounded-full pl-5 pr-2 py-1.5 shadow-[0_4px_15px_rgba(0,0,0,0.02)]">
+           <span className="text-xs font-black text-[#2d4735]">{usuario?.username}</span>
+           <div className="w-8 h-8 rounded-full bg-[#eef3ef] flex items-center justify-center text-[#3b5e47]">
+            <User className="w-4 h-4" />
+          </div>
+          <div className="h-6 w-[1px] bg-[#dce5df]" />
+          <button onClick={logout} className="p-2 text-[#7a9382] hover:text-rose-600 rounded-full">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Selector de Almacén Activo de Trabajo (Persistente) */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 shadow-sm">
-          <Warehouse className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-slate-500 leading-none">
+      <div className="flex w-full lg:w-auto items-center gap-4">
+        <div className="flex-1 lg:flex-none flex items-center gap-3 bg-white border border-[#dce5df] rounded-[1.5rem] px-5 py-2.5 shadow-[0_4px_15px_rgba(0,0,0,0.02)]">
+          <Warehouse className="w-5 h-5 text-[#529363] flex-shrink-0" />
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-[9px] uppercase font-extrabold text-[#7a9382] tracking-[0.15em] leading-none mb-1 truncate">
               Almacén Activo de Trabajo
             </span>
             <select
@@ -57,7 +79,7 @@ export const Header: React.FC = () => {
                 const sel = almacenes.find((a) => a.id === e.target.value);
                 if (sel) setAlmacenActivo(sel);
               }}
-              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-4"
+              className="bg-transparent text-[13px] font-black text-[#2d4735] focus:outline-none cursor-pointer pr-4 appearance-none w-full truncate"
             >
               {almacenes.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -66,39 +88,38 @@ export const Header: React.FC = () => {
               ))}
             </select>
           </div>
+          <ChevronDown className="w-4 h-4 text-[#7a9382] ml-1 flex-shrink-0" />
         </div>
 
         {almacenActivo && (
-          <span className="hidden md:inline-flex text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-medium border border-emerald-200">
-            Operando en: <strong>{almacenActivo.nombre}</strong>
+          <span className="hidden md:inline-flex items-center gap-2 text-[11px] px-4 py-3 bg-[#dce5df]/70 text-[#3b5e47] rounded-full font-bold">
+            Operando en: <span className="text-[#2d4735]">{almacenActivo.nombre}</span>
           </span>
         )}
       </div>
 
-      {/* Usuario, Rol y Salida */}
-      <div className="flex items-center gap-4">
+      {/* Usuario, Rol y Salida en Desktop */}
+      <div className="hidden lg:flex items-center gap-5 bg-white border border-[#dce5df] rounded-full pl-6 pr-2 py-2 shadow-[0_4px_15px_rgba(0,0,0,0.02)]">
         <div className="flex items-center gap-3 text-right">
           <div>
-            <p className="text-sm font-bold text-slate-900 leading-tight">
+            <p className="text-[13px] font-black text-[#2d4735] leading-none mb-1">
               {usuario?.nombre_completo || usuario?.username}
             </p>
-            <span
-              className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded border mt-0.5 ${rolInfo.color}`}
-            >
+            <span className={`text-[10px] font-bold ${rolInfo.color}`}>
               {rolInfo.label}
             </span>
           </div>
-          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 shadow-inner">
+          <div className="w-10 h-10 rounded-full bg-[#eef3ef] flex items-center justify-center text-[#3b5e47]">
             <User className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="h-6 w-px bg-slate-200" />
+        <div className="h-7 w-[1px] bg-[#dce5df]" />
 
         <button
           onClick={logout}
           title="Cerrar sesión"
-          className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+          className="p-2.5 text-[#7a9382] hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors"
         >
           <LogOut className="w-5 h-5" />
         </button>
