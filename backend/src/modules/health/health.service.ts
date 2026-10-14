@@ -111,10 +111,13 @@ export class HealthService {
         latencia_ms: Date.now() - inicio,
       };
     } catch (error) {
-      this.logger.error('Health: BD no responde', error);
+      // El detalle (host, credenciales en mensajes de conexión) queda solo en el log del servidor.
+      this.logger.error(
+        `Health: BD no responde (${error instanceof Error ? error.name : 'Error desconocido'})`,
+      );
       return {
         estado: 'desconectada',
-        error: error instanceof Error ? error.message : 'Error desconocido',
+        error: 'No se pudo conectar con la base de datos',
       };
     }
   }

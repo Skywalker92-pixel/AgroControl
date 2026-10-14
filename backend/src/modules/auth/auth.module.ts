@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RolesGuard } from './guards/roles.guard';
 import { UsuariosModule } from '../usuarios/usuarios.module';
+import { CredencialesPublicasCheck } from './credenciales-publicas.check';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { UsuariosModule } from '../usuarios/usuarios.module';
     UsuariosModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RolesGuard],
+  providers: [AuthService, JwtStrategy, RolesGuard, CredencialesPublicasCheck],
   exports: [AuthService, JwtModule, PassportModule],
 })
 export class AuthModule {}

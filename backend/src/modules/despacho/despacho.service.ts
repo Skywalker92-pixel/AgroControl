@@ -241,6 +241,9 @@ export class DespachoService {
       throw new NotFoundException(`La proforma con ID '${proformaId}' no existe.`);
     }
 
+    // OBS-AUTHZ-01 (IDOR): un VENDEDOR solo opera sobre sus propias proformas.
+    this.asegurarAccesoVendedor(proforma, usuarioId, userRol);
+
     const estadoActual = proforma.estado as EstadoProforma;
     const nuevoEstado = dto.nuevo_estado;
 
@@ -307,8 +310,8 @@ export class DespachoService {
   private async ejecutarReserva(
     tx: Prisma.TransactionClient,
     proforma: any,
-    usuarioId: string,
-    ipOrigen?: string,
+    _usuarioId: string,
+    _ipOrigen?: string,
   ) {
     for (const item of proforma.proforma_detalle) {
       const cantidadBase = Number(item.cantidad_total_base);
@@ -365,7 +368,7 @@ export class DespachoService {
     tx: Prisma.TransactionClient,
     proforma: any,
     usuarioId: string,
-    ipOrigen?: string,
+    _ipOrigen?: string,
   ) {
     for (const item of proforma.proforma_detalle) {
       const cantidadBase = Number(item.cantidad_total_base);
@@ -426,8 +429,8 @@ export class DespachoService {
   private async ejecutarAnulacion(
     tx: Prisma.TransactionClient,
     proforma: any,
-    usuarioId: string,
-    ipOrigen?: string,
+    _usuarioId: string,
+    _ipOrigen?: string,
   ) {
     const estadoPrevio = proforma.estado as EstadoProforma;
 
@@ -467,8 +470,9 @@ export class DespachoService {
    * Emite el DTO formateado para la impresión de la Orden de Despacho física.
    * Diseñado específicamente para el personal de carga en almacén.
    */
-  async obtenerOrdenDespacho(proformaId: string) {
+  async obtenerOrdenDespacho(proformaId: string, usuarioId?: string, usuarioRol?: string) {
     const proforma = await this.buscarPorId(proformaId);
+    this.asegurarAccesoVendedor(proforma, usuarioId, usuarioRol);
 
     const itemsFormateados = proforma.proforma_detalle.map((det: any, index: number) => {
       const factor = det.presentacion ? Number(det.presentacion.factor) : 1;
@@ -673,6 +677,32 @@ export class DespachoService {
     return proforma;
   }
 
+  /**
+   * Consulta de proforma por ID desde la API, aplicando la regla de propiedad
+   * para el rol VENDEDOR (OBS-AUTHZ-01).
+   */
+  async buscarPorIdAutorizado(id: string, usuarioId?: string, usuarioRol?: string) {
+    const proforma = await this.buscarPorId(id);
+    this.asegurarAccesoVendedor(proforma, usuarioId, usuarioRol);
+    return proforma;
+  }
+
+  /**
+   * Un VENDEDOR solo puede consultar u operar las proformas que él mismo creó.
+   * Los roles administrativos y de almacén no están restringidos.
+   */
+  private asegurarAccesoVendedor(
+    proforma: { creado_por: string | null },
+    usuarioId?: string,
+    usuarioRol?: string,
+  ) {
+    if (usuarioRol === RolUsuario.VENDEDOR && proforma.creado_por !== usuarioId) {
+      throw new ForbiddenException(
+        'No está autorizado para acceder a una proforma registrada por otro vendedor.',
+      );
+    }
+  }
+
   private validarTransicionEstado(actual: EstadoProforma, nuevo: EstadoProforma) {
     const permitidas: Record<EstadoProforma, EstadoProforma[]> = {
       [EstadoProforma.BORRADOR]: [EstadoProforma.RESERVADO, EstadoProforma.ANULADO],
@@ -694,7 +724,7 @@ export class DespachoService {
     }
   }
 
-  private validarPermisoRol(nuevoEstado: EstadoProforma, rol: string, estadoActual: EstadoProforma) {
+  private validarPermisoRol(nuevoEstado: EstadoProforma, rol: string, _estadoActual: EstadoProforma) {
     if (nuevoEstado === EstadoProforma.PREPARADO || nuevoEstado === EstadoProforma.DESPACHADO) {
       const rolesAutorizados = [
         RolUsuario.ADMINISTRADOR_PROPIETARIO,

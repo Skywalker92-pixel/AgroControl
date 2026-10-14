@@ -58,12 +58,20 @@ export class DespachoController {
   }
 
   @Get(':id')
-  buscarPorId(@Param('id') id: string) {
-    return this.despachoService.buscarPorId(id);
+  buscarPorId(
+    @Param('id') id: string,
+    @CurrentUser('id') usuarioId: string,
+    @CurrentUser('rol') usuarioRol: string,
+  ) {
+    return this.despachoService.buscarPorIdAutorizado(id, usuarioId, usuarioRol);
   }
 
   @Get(':id/orden-despacho')
-  obtenerOrdenDespacho(@Param('id') id: string) {
-    return this.despachoService.obtenerOrdenDespacho(id);
+  obtenerOrdenDespacho(
+    @Param('id') id: string,
+    @CurrentUser('id') usuarioId: string,
+    @CurrentUser('rol') usuarioRol: string,
+  ) {
+    return this.despachoService.obtenerOrdenDespacho(id, usuarioId, usuarioRol);
   }
 }

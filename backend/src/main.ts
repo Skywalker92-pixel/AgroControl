@@ -1,55 +1,56 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { validateEnvironment } from './core/config/env.validation';
+
+/**
+ * Valor por defecto de `trust proxy`: confía solo en proxies de red privada
+ * (Nginx en Docker, LAN). Así request.ip refleja al cliente real detrás del
+ * proxy, pero un cliente público directo no puede falsear X-Forwarded-For.
+ * En PaaS (p. ej. Render) configure TRUST_PROXY=1.
+ */
+const DEFAULT_TRUST_PROXY = 'loopback, linklocal, uniquelocal';
+
+function parseTrustProxy(raw: string | undefined): boolean | number | string {
+  if (!raw) return DEFAULT_TRUST_PROXY;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
 
 async function bootstrap() {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret || jwtSecret.length < 16) {
-    throw new Error('FATAL: JWT_SECRET no configurado o es demasiado corto (mínimo 16 caracteres)');
-  }
-  if (isProduction && (jwtSecret.includes('agrocontrol_secret_pass') || jwtSecret.includes('super_seguro_jwt_secret'))) {
-    throw new Error('FATAL: No se permite usar valores de JWT_SECRET por defecto de prueba en entorno de producción.');
-  }
-
-  if (!process.env.DATABASE_URL) {
-    throw new Error('FATAL: DATABASE_URL no configurada en variables de entorno.');
-  }
-
-  if (isProduction && (!process.env.CORS_ORIGINS || process.env.CORS_ORIGINS.includes('*'))) {
-    throw new Error('FATAL: CORS_ORIGINS debe configurarse explícitamente y sin comodines (*) en producción.');
-  }
+  // Fail-fast: rechaza secretos de ejemplo y CORS inseguro en producción.
+  const { isProduction, allowedOrigins } = validateEnvironment(process.env);
 
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Cabeceras de seguridad HTTP (OBS-WEB-02)
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
+
+  // Cabeceras de seguridad HTTP (OBS-WEB-02).
+  // La API solo devuelve JSON/CSV: no necesita cargar recursos ni ser embebida.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'none'"],
+          formAction: ["'none'"],
+        },
+      },
+      hsts: isProduction ? undefined : false,
+    }),
+  );
 
   // Prefijo global requerido por directrices de API
   app.setGlobalPrefix('api');
 
-  // Configuración de CORS con Allowlist seguro (OBS-SEC-05)
-  const localOrigins = [
-    'http://localhost:5173',
-    'http://localhost:80',
-    'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:80',
-    'http://127.0.0.1:3000',
-  ];
-
-  const envOrigins = (process.env.CORS_ORIGINS || 'https://agro-control-eight.vercel.app')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-
-  const allowedOrigins = Array.from(
-    new Set(isProduction ? envOrigins : [...localOrigins, ...envOrigins]),
-  );
-
+  // CORS con allowlist estricta (OBS-SEC-05). En producción solo CORS_ORIGINS.
   app.enableCors({
     origin: (origin, callback) => {
       // Permitir peticiones sin cabecera Origin (apps móviles nativas, CLI, curl, SSR)
@@ -74,11 +75,9 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
 
-  logger.log(`==================================================================`);
-  logger.log(` AgroControl Pro API escuchando en: http://localhost:${port}/api `);
-  logger.log(` Base de datos conectada: PostgreSQL (agrocontrol_db)              `);
-  logger.log(` Entorno: ${process.env.NODE_ENV || 'development'}                `);
-  logger.log(`==================================================================`);
+  logger.log(`AgroControl Pro API escuchando en el puerto ${port} (prefijo /api)`);
+  logger.log(`Entorno: ${process.env.NODE_ENV || 'development'}`);
+  logger.log(`Orígenes CORS permitidos: ${allowedOrigins.length}`);
 }
 
 bootstrap();
