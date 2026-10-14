@@ -14,7 +14,18 @@ if [ -z "${BACKUP_ENCRYPTION_KEY}" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR CRÍTICO: BACKUP_ENCRYPTION_KEY no configurado o vacío. Abortando respaldo para evitar generar archivos desprotegidos."
     exit 1
 fi
-ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
+case "${BACKUP_ENCRYPTION_KEY}" in
+    *CHANGE_ME*|*changeme*|*example*)
+        echo "ERROR CRÍTICO: BACKUP_ENCRYPTION_KEY contiene un valor de ejemplo. Configure una clave aleatoria propia."
+        exit 1
+        ;;
+esac
+if [ "${#BACKUP_ENCRYPTION_KEY}" -lt 32 ]; then
+    echo "ERROR CRÍTICO: BACKUP_ENCRYPTION_KEY debe tener al menos 32 caracteres."
+    exit 1
+fi
+# La clave se lee desde el entorno (-pass env:) para no exponerla en la lista de procesos.
+export BACKUP_ENCRYPTION_KEY
 
 mkdir -p "$BACKUP_PATH"
 
@@ -24,7 +35,7 @@ export PGPASSWORD="${DB_PASSWORD}"
 
 pg_dump -h "${DB_HOST}" -p "${DB_PORT:-5432}" -U "${DB_USER}" -d "${DB_NAME}" --no-owner --clean --if-exists \
   | gzip \
-  | openssl enc -aes-256-cbc -salt -pbkdf2 -pass "pass:${ENCRYPTION_KEY}" > "${BACKUP_PATH}/${FILENAME}"
+  | openssl enc -aes-256-cbc -salt -pbkdf2 -pass env:BACKUP_ENCRYPTION_KEY > "${BACKUP_PATH}/${FILENAME}"
 
 if [ -s "${BACKUP_PATH}/${FILENAME}" ]; then
     FILESIZE=$(ls -lh "${BACKUP_PATH}/${FILENAME}" | awk '{print $5}')

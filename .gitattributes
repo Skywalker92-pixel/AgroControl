@@ -1,0 +1,19 @@
+# Normalización de fin de línea.
+# Los scripts que se ejecutan dentro de contenedores Linux DEBEN usar LF:
+# con CRLF (core.autocrlf=true en Windows) `set -e` falla con "illegal option -"
+# y el servicio de backups entra en bucle de reinicio sin generar respaldos.
+* text=auto
+
+*.sh        text eol=lf
+*.conf      text eol=lf
+Dockerfile* text eol=lf
+docker/Dockerfile.* text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.sql       text eol=lf
+
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+*.png binary
+*.ico binary

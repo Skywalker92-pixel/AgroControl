@@ -10,7 +10,8 @@ if [ -z "${BACKUP_ENCRYPTION_KEY}" ]; then
     echo "ERROR: BACKUP_ENCRYPTION_KEY no configurado o vacío. Se requiere la clave de descifrado."
     exit 1
 fi
-ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
+# La clave se lee desde el entorno (-pass env:) para no exponerla en la lista de procesos.
+export BACKUP_ENCRYPTION_KEY
 BACKUP_FILE="${1:-$BACKUP_FILE}"
 
 if [ -z "$BACKUP_FILE" ]; then
@@ -36,7 +37,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Procesando y restaurando base de datos..."
 case "$BACKUP_FILE" in
     *.enc)
         echo "Detectado archivo cifrado (.enc). Desencriptando con OpenSSL..."
-        openssl enc -d -aes-256-cbc -pbkdf2 -pass "pass:${ENCRYPTION_KEY}" -in "$BACKUP_FILE" \
+        openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_ENCRYPTION_KEY -in "$BACKUP_FILE" \
           | gunzip \
           | psql -h "${DB_HOST}" -p "${DB_PORT:-5432}" -U "${DB_USER}" -d "${DB_NAME}"
         ;;
