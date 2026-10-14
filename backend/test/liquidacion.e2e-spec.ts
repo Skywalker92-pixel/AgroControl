@@ -10,7 +10,6 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
   let adminToken: string;
   let operadorToken: string;
   let vendedorToken: string;
-  let vendedor2Token: string;
   let vendedorId: string;
   let vendedor2Id: string;
 
@@ -22,7 +21,6 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
   const factorCaja = 12;
 
   let vehiculoId: string;
-  let vehiculoPlaca: string;
   let bodegaMovilId: string;
   let cargaEnRutaId: string;
 
@@ -47,26 +45,26 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
     // 1. Obtener tokens
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const v1Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = v1Login.body.access_token;
 
-    const uVendedor1 = await prisma.usuario.findUnique({ where: { username: 'vendedor1' } });
+    const uVendedor1 = await prisma.usuario.findUnique({ where: { username: 'demo.vendedor' } });
     vendedorId = uVendedor1 ? uVendedor1.id : '';
 
     let uVendedor2 = await prisma.usuario.findUnique({ where: { username: 'vendedor2' } });
     if (!uVendedor2) {
       const bcrypt = require('bcryptjs');
-      const hash = await bcrypt.hash('AgroControl2026*', 10);
+      const hash = await bcrypt.hash('Demo-NoProduccion-2026', 10);
       uVendedor2 = await prisma.usuario.create({
         data: {
           username: 'vendedor2',
@@ -81,8 +79,8 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
     vendedor2Id = uVendedor2.id;
     const v2Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor2', password: 'AgroControl2026*' });
-    vendedor2Token = v2Login.body.access_token;
+      .send({ username: 'vendedor2', password: 'Demo-NoProduccion-2026' });
+    expect(v2Login.body.access_token).toBeDefined();
 
     // 2. Localizar almacén físico principal
     const almacen = await prisma.ubicacion.findFirst({
@@ -131,7 +129,7 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
     producto2Id = p2.id;
 
     // Inyectar 500 litros de P1 y 200 kg de P2 en el almacén de origen
-    const adminUser = await prisma.usuario.findUnique({ where: { username: 'alipio.admin' } });
+    const adminUser = await prisma.usuario.findUnique({ where: { username: 'demo.admin' } });
     await prisma.movimiento_kardex.createMany({
       data: [
         {
@@ -186,7 +184,7 @@ describe('Hito 9: Retornos de Mercadería y Módulo de Liquidación de Vendedore
         conductor_habitual_id: vendedorId,
       });
     vehiculoId = vehRes.body.id;
-    vehiculoPlaca = vehRes.body.placa;
+    expect(vehRes.body.placa).toBeDefined();
     bodegaMovilId = vehRes.body.bodega_movil.id;
 
     // 6. Crear carga de distribución y despacharla

@@ -1,4 +1,12 @@
 -- ==============================================================================
+-- AGROCONTROL PRO - SCRIPT CONSOLIDADO PARA SUPABASE / POSTGRESQL GESTIONADO
+-- Generado concatenando database/migrations/*.sql + database/seeds/000_seed_base.sql
+-- NO crea usuarios. Tras ejecutarlo, crear el administrador inicial con:
+--   database/bootstrap/001_admin_inicial.sql
+-- Para una base existente basta aplicar las migraciones nuevas (p. ej. 006).
+-- ==============================================================================
+
+-- ==============================================================================
 -- AGROCONTROL PRO - MIGRACIÓN INICIAL DDL (FASE 1: NÚCLEO)
 -- Archivo: 001_initial_schema_fase1.sql
 -- ==============================================================================
@@ -555,8 +563,61 @@ ALTER TABLE operacion_sincronizada
 CREATE INDEX IF NOT EXISTS ix_operacion_sync_resolutor ON operacion_sincronizada(usuario_resolutor_id);
 CREATE INDEX IF NOT EXISTS ix_operacion_sync_fecha_resolucion ON operacion_sincronizada(fecha_resolucion);
 -- ==============================================================================
--- AGROCONTROL PRO - SEED DE DATOS INICIALES (FASE 1: NÚCLEO)
--- Archivo: 001_seed_fase1.sql
+-- AGROCONTROL PRO - MIGRACIÓN 006: TIPOS PERMITIDOS EN SINCRONIZACIÓN Y KÁRDEX
+-- Archivo: 006_fase3_tipos_sync_y_kardex.sql
+-- ==============================================================================
+-- Corrige restricciones CHECK que no incluían tipos que el backend ya emite:
+--
+-- 1. operacion_sincronizada.tipo_operacion no admitía 'CLIENTE_NUEVO'
+--    (alta de clientes en ruta, OBS-MOB-03): el PUSH respondía 500 y bloqueaba
+--    el lote completo del vendedor.
+-- 2. movimiento_kardex.tipo no admitía 'DEVOLUCION_RUTA' ni 'SOBRANTE_RUTA'
+--    (operaciones DEVOLUCION / SOBRANTE de la sincronización móvil).
+--    Se incluyen además 'ENTRADA_COMPRA' e 'INVENTARIO_INICIAL', usados por el
+--    seed de demostración, para que ningún seed tenga que alterar el esquema.
+--
+-- Solo amplía los valores permitidos: no modifica ni elimina filas existentes,
+-- por lo que respeta la inmutabilidad del Kárdex (los triggers de bloqueo de
+-- UPDATE/DELETE sobre movimiento_kardex no se ven afectados).
+-- Idempotente: puede ejecutarse más de una vez.
+-- ==============================================================================
+
+BEGIN;
+
+ALTER TABLE operacion_sincronizada
+    DROP CONSTRAINT IF EXISTS operacion_sincronizada_tipo_operacion_check;
+ALTER TABLE operacion_sincronizada
+    ADD CONSTRAINT operacion_sincronizada_tipo_operacion_check
+    CHECK (tipo_operacion IN ('VENTA', 'COBRO', 'DEVOLUCION', 'SOBRANTE', 'PEDIDO', 'CLIENTE_NUEVO'));
+
+ALTER TABLE movimiento_kardex
+    DROP CONSTRAINT IF EXISTS movimiento_kardex_tipo_check;
+ALTER TABLE movimiento_kardex
+    ADD CONSTRAINT movimiento_kardex_tipo_check
+    CHECK (tipo IN (
+        'ENTRADA',
+        'ENTRADA_COMPRA',
+        'INVENTARIO_INICIAL',
+        'SALIDA',
+        'TRASLADO_SALIDA',
+        'TRASLADO_ENTRADA',
+        'AJUSTE',
+        'ASIGNACION_DISTRIBUCION',
+        'VENTA_RUTA',
+        'DEVOLUCION_RUTA',
+        'SOBRANTE_RUTA',
+        'RETORNO_DISTRIBUCION',
+        'ANULACION'
+    ));
+
+COMMIT;
+-- ==============================================================================
+-- AGROCONTROL PRO - SEED DE DATOS BASE (REFERENCIA)
+-- Archivo: 000_seed_base.sql
+-- ==============================================================================
+-- Datos de referencia mínimos y genéricos (ubicaciones iniciales, categorías y
+-- listas de precio). NO crea usuarios: es seguro para producción.
+-- El administrador inicial se crea con database/bootstrap/001_admin_inicial.sql
 -- ==============================================================================
 
 -- 1. ALMACÉN PRINCIPAL Y ZONA DE ALMACENAMIENTO INICIAL
@@ -588,46 +649,3 @@ VALUES
     ('b0000000-0000-0000-0000-000000000002', 'MINORISTA', 'Lista Minorista', 'Precio de venta al público en mostrador', TRUE)
 ON CONFLICT (codigo) DO NOTHING;
 
--- 4. USUARIOS INICIALES CON LOS 4 ROLES DEL DOMINIO
--- Contraseña inicial para todos los usuarios de prueba: 'AgroControl2026*'
--- Hash verificado generado con bcrypt: $2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW
-INSERT INTO usuario (id, username, password_hash, nombre_completo, email, rol, activo)
-VALUES 
-    (
-        'e0000000-0000-0000-0000-000000000001', 
-        'alipio.admin', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Sr. Alipio (Propietario)', 
-        'alipio@agrocontrol.local', 
-        'ADMINISTRADOR_PROPIETARIO', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000002', 
-        'esposa.admin', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Administradora Secundaria', 
-        'administracion@agrocontrol.local', 
-        'ADMINISTRADOR_SECUNDARIO', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000003', 
-        'almacen1', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Operador de Almacén Principal', 
-        'almacen@agrocontrol.local', 
-        'OPERADOR_ALMACEN', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000004', 
-        'vendedor1', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Vendedor en Ruta', 
-        'vendedor1@agrocontrol.local', 
-        'VENDEDOR', 
-        TRUE
-    )
-ON CONFLICT (username) DO UPDATE
-SET password_hash = EXCLUDED.password_hash;

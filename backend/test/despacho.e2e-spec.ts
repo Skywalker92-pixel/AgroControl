@@ -39,17 +39,17 @@ describe('Hito 5: Pedidos, Proformas y Despacho con Triple Saldo (e2e)', () => {
     // 1. Obtener tokens de autenticación
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const venLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = venLogin.body.access_token;
 
     // 2. Obtener lista mayorista
@@ -63,9 +63,9 @@ describe('Hito 5: Pedidos, Proformas y Despacho con Triple Saldo (e2e)', () => {
       data: {
         tipo_documento: 'RUC',
         numero_documento: `20${Date.now().toString().slice(-9)}`,
-        razon_social: 'Agrícola Valle Hermoso SAC',
-        direccion: 'Valle de Pisco Km 15',
-        telefono: '956123456',
+        razon_social: 'Cliente Demo Despacho SAC',
+        direccion: 'Dirección Demo Km 15',
+        telefono: '900000000',
         lista_precio_id: listaMayoristaId,
       },
     });
@@ -141,7 +141,6 @@ describe('Hito 5: Pedidos, Proformas y Despacho con Triple Saldo (e2e)', () => {
   });
 
   describe('1. Creación en BORRADOR y Validación de Cantidades y Precios', () => {
-    let proformaBorradorId: string;
 
     it('1.1 [a] Creación en BORRADOR no altera cantidad_reservada ni cantidad_fisica', async () => {
       // Venta de 2 Cajas x12 + 1 unidad suelta = 25 litros
@@ -171,7 +170,7 @@ describe('Hito 5: Pedidos, Proformas y Despacho con Triple Saldo (e2e)', () => {
       expect(Number(res.body.igv)).toBe(157.5);
       expect(Number(res.body.total)).toBe(1032.5);
 
-      proformaBorradorId = res.body.id;
+      expect(res.body.id).toBeDefined();
 
       // Invariante: En BORRADOR el stock_saldo permanece intacto
       const saldoDb = await prisma.stock_saldo.findUnique({
@@ -422,7 +421,7 @@ describe('Hito 5: Pedidos, Proformas y Despacho con Triple Saldo (e2e)', () => {
         .expect(200);
 
       expect(res.body.numero_documento).toContain('PROF-');
-      expect(res.body.cliente.razon_social).toBe('Agrícola Valle Hermoso SAC');
+      expect(res.body.cliente.razon_social).toBe('Cliente Demo Despacho SAC');
       expect(res.body.almacen_origen.id).toBe(almacenId);
       expect(res.body.items.length).toBe(1);
       expect(res.body.items[0].descripcion_empaque).toContain('2 Caja x12 + 1 litro(s) suelta(s)');

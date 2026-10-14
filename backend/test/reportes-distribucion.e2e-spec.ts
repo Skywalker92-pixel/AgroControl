@@ -8,7 +8,6 @@ describe('Hito 10: Auditoría, Reportes de Reparto y Cierre de la Fase 2 (e2e)',
   let app: INestApplication;
   let prisma: PrismaService;
   let adminToken: string;
-  let operadorToken: string;
   let vendedorToken: string;
   let adminUser: any;
   let vendedorUser: any;
@@ -46,20 +45,20 @@ describe('Hito 10: Auditoría, Reportes de Reparto y Cierre de la Fase 2 (e2e)',
     // 1. Obtener tokens
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
-    adminUser = await prisma.usuario.findUnique({ where: { username: 'alipio.admin' } });
+    adminUser = await prisma.usuario.findUnique({ where: { username: 'demo.admin' } });
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
-    operadorToken = opLogin.body.access_token;
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
+    expect(opLogin.body.access_token).toBeDefined();
 
     const v1Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = v1Login.body.access_token;
-    vendedorUser = await prisma.usuario.findUnique({ where: { username: 'vendedor1' } });
+    vendedorUser = await prisma.usuario.findUnique({ where: { username: 'demo.vendedor' } });
 
     // 2. Almacén origen
     const almacen = await prisma.ubicacion.findFirst({

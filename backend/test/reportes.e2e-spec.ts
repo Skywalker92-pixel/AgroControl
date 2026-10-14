@@ -2,11 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/core/prisma/prisma.service';
 
 describe('Hito 7: Reportes Básicos, Conciliación Automática y Cierre de Fase 1 (e2e)', () => {
   let app: INestApplication;
-  let prisma: PrismaService;
   let adminToken: string;
   let operadorToken: string;
 
@@ -26,17 +24,16 @@ describe('Hito 7: Reportes Básicos, Conciliación Automática y Cierre de Fase 
     );
     await app.init();
 
-    prisma = app.get<PrismaService>(PrismaService);
 
     // Tokens de autenticación
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
   }, 30000);
 

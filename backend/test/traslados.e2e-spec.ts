@@ -37,17 +37,17 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
     // 1. Obtener tokens de autenticación
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const venLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = venLogin.body.access_token;
 
     // 2. Crear categoría y producto base para las pruebas
@@ -76,8 +76,8 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
     const almOrigen = await prisma.ubicacion.create({
       data: {
         tipo: 'ALMACEN',
-        codigo: `ALM-PISCO-${Date.now().toString().slice(-4)}`,
-        nombre: 'Almacén Principal Pisco',
+        codigo: `ALM-DEMO-${Date.now().toString().slice(-4)}`,
+        nombre: 'Almacén Principal Demo',
       },
     });
     almacenOrigenId = almOrigen.id;
@@ -186,7 +186,6 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
   });
 
   describe('2. Ejecución Atómica del Traslado y Doble Movimiento en Kárdex', () => {
-    let trasladoId: string;
     let movSalidaId: string;
     let movEntradaId: string;
 
@@ -201,7 +200,7 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
           origen_id: almacenOrigenId,
           destino_id: almacenDestinoId,
           cantidad_base: 40,
-          motivo: 'Reabastecimiento por falta de espacio en almacén principal Pisco',
+          motivo: 'Reabastecimiento por falta de espacio en almacén principal Demo',
         })
         .expect(201);
 
@@ -218,7 +217,7 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
       expect(res.body.destino.cantidad_fisica).toBe(40);
       expect(res.body.destino.cantidad_disponible).toBe(40);
 
-      trasladoId = res.body.traslado_id;
+      expect(res.body.traslado_id).toBeDefined();
       movSalidaId = res.body.movimiento_salida_id;
       movEntradaId = res.body.movimiento_entrada_id;
 
@@ -269,8 +268,8 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
       expect(movEntrada.movimiento_ref_id).toBe(movSalida.id);
 
       // Coincidencia de metadatos de auditoría
-      expect(movSalida.motivo).toBe('Reabastecimiento por falta de espacio en almacén principal Pisco');
-      expect(movEntrada.motivo).toBe('Reabastecimiento por falta de espacio en almacén principal Pisco');
+      expect(movSalida.motivo).toBe('Reabastecimiento por falta de espacio en almacén principal Demo');
+      expect(movEntrada.motivo).toBe('Reabastecimiento por falta de espacio en almacén principal Demo');
       expect(movSalida.usuario_id).toBe(movEntrada.usuario_id);
     });
   });
@@ -350,7 +349,7 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
     });
 
     it('3.4 Traslado de retorno y verificación de consistencia continua', async () => {
-      // Trasladar de regreso 15 unidades de Chincha a Pisco
+      // Trasladar de regreso 15 unidades del almacén secundario al principal
       const res = await request(app.getHttpServer())
         .post('/api/inventario/traslado')
         .set('Authorization', `Bearer ${adminToken}`)

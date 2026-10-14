@@ -1,6 +1,7 @@
 import React from 'react';
 import { Printer, X, CheckCircle, Package } from 'lucide-react';
 import { OrdenDespacho } from '../types';
+import { EMPRESA, lineaIdentificacionEmpresa } from '../config/empresa';
 
 interface OrdenDespachoModalProps {
   orden: OrdenDespacho | null;
@@ -71,14 +72,14 @@ export const OrdenDespachoModal: React.FC<OrdenDespachoModalProps> = ({
           <div className="border-b-2 border-slate-800 pb-4 flex justify-between items-start">
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                AGROCONTROL PRO
+                {EMPRESA.nombre}
               </h1>
               <p className="text-xs text-slate-600 font-medium">
                 Venta y Distribución de Insumos Agrícolas
               </p>
-              <p className="text-xs text-slate-500">
-                Local Comercial Principal – Pisco, Ica, Perú
-              </p>
+              {lineaIdentificacionEmpresa() && (
+                <p className="text-xs text-slate-500">{lineaIdentificacionEmpresa()}</p>
+              )}
             </div>
             <div className="text-right border border-slate-300 p-2.5 rounded-lg bg-slate-50">
               <span className="text-[10px] uppercase font-bold text-slate-500 block">

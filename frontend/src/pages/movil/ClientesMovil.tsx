@@ -241,7 +241,7 @@ export const ClientesMovil: React.FC = () => {
                   type="tel"
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}
-                  placeholder="Ej. 987654321"
+                  placeholder="Ej. 900000000"
                   className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

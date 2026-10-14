@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { reportesApi, catalogoApi, distribucionApi, usuariosApi } from '../api/services';
 import { useWarehouseStore } from '../store/warehouseStore';
+import { EMPRESA, lineaIdentificacionEmpresa } from '../config/empresa';
 import {
   ReporteStockItem,
   ReporteMovimientoItem,
@@ -395,10 +396,12 @@ export const Reportes: React.FC = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-              AGROCONTROL PRO - REPORTE OFICIAL
+              {EMPRESA.nombre} - REPORTE OFICIAL
             </h1>
             <p className="text-xs text-slate-600 font-medium">
-              Local Principal - Sistema Administrativo Central | RUC: 20608945123
+              {['Sistema Administrativo Central', lineaIdentificacionEmpresa()]
+                .filter(Boolean)
+                .join(' | ')}
             </p>
           </div>
           <div className="text-right text-xs text-slate-500">

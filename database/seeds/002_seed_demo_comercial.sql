@@ -1,7 +1,14 @@
 -- ==============================================================================
--- AGROCONTROL PRO - SEED DATASET DE DEMOSTRACIÓN REALISTA PARA EL SR. ALIPIO
--- Archivo: database/seeds/002_seed_demo_alipio.sql
--- Dominio: Distribución de Insumos Agrícolas en Pisco e Ica, Perú
+-- AGROCONTROL PRO - SEED DATASET DE DEMOSTRACIÓN COMERCIAL (CLIENTE DEMO)
+-- Archivo: database/seeds/002_seed_demo_comercial.sql
+-- Dominio: Distribución de Insumos Agrícolas (zona geográfica ficticia)
+-- ------------------------------------------------------------------------------
+-- DATOS FICTICIOS PARA DEMOSTRACIÓN
+-- NO CORRESPONDEN A INFORMACIÓN REAL DE CLIENTES
+-- Nombres, documentos, teléfonos, correos, direcciones, placas y precios son
+-- inventados. Requiere 000_seed_base.sql y 001_seed_usuarios_demo.sql.
+-- NUNCA ejecutar en producción.
+-- ------------------------------------------------------------------------------
 -- ==============================================================================
 -- REGLA INVIOLABLE DE INTEGRIDAD DEL KÁRDEX:
 -- Todo saldo en stock_saldo está respaldado estrictamente por la suma matemática
@@ -11,23 +18,8 @@
 
 BEGIN;
 
--- ------------------------------------------------------------------------------
--- 0. EXTENSIÓN DE VALORES PERMITIDOS EN CHECK CONSTRAINT DEL KÁRDEX
--- ------------------------------------------------------------------------------
-ALTER TABLE movimiento_kardex DROP CONSTRAINT IF EXISTS movimiento_kardex_tipo_check;
-ALTER TABLE movimiento_kardex ADD CONSTRAINT movimiento_kardex_tipo_check CHECK (tipo IN (
-    'ENTRADA',
-    'ENTRADA_COMPRA',
-    'INVENTARIO_INICIAL',
-    'SALIDA',
-    'TRASLADO_SALIDA',
-    'TRASLADO_ENTRADA',
-    'AJUSTE',
-    'ASIGNACION_DISTRIBUCION',
-    'VENTA_RUTA',
-    'RETORNO_DISTRIBUCION',
-    'ANULACION'
-));
+-- Los tipos de Kárdex usados aquí (INVENTARIO_INICIAL, etc.) los habilita la
+-- migración 006_fase3_tipos_sync_y_kardex.sql: este seed no altera el esquema.
 
 -- ------------------------------------------------------------------------------
 -- 1. ALMACENES Y FLOTA
@@ -39,16 +31,16 @@ VALUES
     (
         'a1000000-0000-0000-0000-000000000001', 
         'ALMACEN', 
-        'ALM-PISCO-PPAL', 
-        'Almacén Principal Pisco', 
+        'ALM-DEMO-PPAL', 
+        'Almacén Principal Demo', 
         NULL, 
         TRUE
     ),
     (
         'a1000000-0000-0000-0000-000000000002', 
         'ALMACEN', 
-        'DEP-SAN-CLEMENTE', 
-        'Depósito San Clemente', 
+        'DEP-DEMO-01', 
+        'Depósito Demo', 
         NULL, 
         TRUE
     )
@@ -60,15 +52,15 @@ SET nombre = EXCLUDED.nombre,
 INSERT INTO vehiculo (id, placa, marca, modelo, tipo_vehiculo, capacidad_kg, capacidad_volumen, conductor_habitual_id, activo, observaciones)
 VALUES (
     'fe100000-0000-0000-0000-000000000001',
-    'V7X-842',
+    'DEM-001',
     'Hyundai',
     'Camión Hyundai HD78 4.5T',
     'CAMION',
     4500.00,
     25.00,
-    'e0000000-0000-0000-0000-000000000004', -- vendedor1
+    'e0000000-0000-0000-0000-000000000004', -- demo.vendedor
     TRUE,
-    'Unidad principal de distribución en ruta - Valle de Pisco'
+    'Unidad principal de distribución en ruta - Ruta Demo'
 )
 ON CONFLICT (placa) DO UPDATE
 SET marca = EXCLUDED.marca,
@@ -81,11 +73,11 @@ INSERT INTO ubicacion (id, tipo, codigo, nombre, padre_id, vehiculo_id, trabajad
 VALUES (
     'a1000000-0000-0000-0000-000000000003',
     'BODEGA_MOVIL',
-    'BM-V7X-842',
-    'Bodega Móvil Camión V7X-842',
-    'a1000000-0000-0000-0000-000000000001', -- Perteneciente al Almacén Principal Pisco
+    'BM-DEM-001',
+    'Bodega Móvil Camión DEM-001',
+    'a1000000-0000-0000-0000-000000000001', -- Perteneciente al Almacén Principal Demo
     'fe100000-0000-0000-0000-000000000001',
-    'e0000000-0000-0000-0000-000000000004', -- vendedor1
+    'e0000000-0000-0000-0000-000000000004', -- demo.vendedor
     TRUE
 )
 ON CONFLICT (codigo) DO UPDATE
@@ -98,11 +90,11 @@ SET nombre = EXCLUDED.nombre,
 INSERT INTO dispositivo_movil (id, codigo_dispositivo, modelo, sistema_operativo, version_app, trabajador_id, activo, autorizado)
 VALUES (
     'de100000-0000-0000-0000-000000000001',
-    'TERM-ALIP-001',
-    'Samsung Galaxy A54 Enterprise',
+    'DEMO-001',
+    'Terminal Android Demo',
     'Android 14',
     '1.0.0',
-    'e0000000-0000-0000-0000-000000000004', -- vendedor1
+    'e0000000-0000-0000-0000-000000000004', -- demo.vendedor
     TRUE,
     TRUE
 )
@@ -264,51 +256,51 @@ SET precio = EXCLUDED.precio,
     actualizado_en = NOW();
 
 -- ------------------------------------------------------------------------------
--- 3. CLIENTES REALISTAS DEL VALLE DE PISCO
+-- 3. CLIENTES FICTICIOS DE DEMOSTRACIÓN
 -- ------------------------------------------------------------------------------
 INSERT INTO cliente (id, tipo_documento, numero_documento, razon_social, direccion, telefono, email, lista_precio_id, activo)
 VALUES 
     (
         'c1100000-0000-0000-0000-000000000001',
         'RUC',
-        '20601234567',
-        'Fundo Santa Rosa S.A.C.',
-        'Carretera Panamericana Sur Km 234, Pisco, Ica',
-        '956123456',
-        'compras@fundosantarosa.pe',
+        '20000000001',
+        'Cliente Demo Mayorista A S.A.C.',
+        'Dirección Demo 101, Zona Ficticia',
+        '900000001',
+        'cliente.demo.1@example.com',
         'b0000000-0000-0000-0000-000000000001', -- Mayorista
         TRUE
     ),
     (
         'c1100000-0000-0000-0000-000000000002',
         'RUC',
-        '20549876543',
-        'Agrícola Don Hernán S.R.L.',
-        'Valle de Pisco Bajo - Sector La Huaca, Pisco',
-        '987654321',
-        'administracion@agricoladonhernan.com',
+        '20000000002',
+        'Cliente Demo Mayorista B S.R.L.',
+        'Dirección Demo 202, Zona Ficticia',
+        '900000002',
+        'cliente.demo.2@example.com',
         'b0000000-0000-0000-0000-000000000001', -- Mayorista
         TRUE
     ),
     (
         'c1100000-0000-0000-0000-000000000003',
         'DNI',
-        '41234567',
-        'Marcelino Flores Quispe (Parcela Los Olivos)',
-        'Caserío Montalbán S/N, San Clemente, Pisco',
-        '945678123',
-        'marcelino.flores@gmail.com',
+        '00000003',
+        'Cliente Demo Minorista C',
+        'Dirección Demo 303, Zona Ficticia',
+        '900000003',
+        'cliente.demo.3@example.com',
         'b0000000-0000-0000-0000-000000000002', -- Minorista
         TRUE
     ),
     (
         'c1100000-0000-0000-0000-000000000004',
         'RUC',
-        '10423456789',
-        'Fundo Los Frutales (García Ramos Alberto)',
-        'Sector Cabeza de Toro, Humay, Pisco',
-        '978123987',
-        'ventas@fundolosfrutales.pe',
+        '10000000004',
+        'Cliente Demo Mayorista D',
+        'Dirección Demo 404, Zona Ficticia',
+        '900000004',
+        'cliente.demo.4@example.com',
         'b0000000-0000-0000-0000-000000000001', -- Mayorista
         TRUE
     )
@@ -327,7 +319,7 @@ SET razon_social = EXCLUDED.razon_social,
 -- previo correspondiente en movimiento_kardex con tipo 'INVENTARIO_INICIAL'.
 -- ------------------------------------------------------------------------------
 
--- 4.1 Asientos de Kárdex: Stock Inicial en Almacén Principal Pisco
+-- 4.1 Asientos de Kárdex: Stock Inicial en Almacén Principal Demo
 INSERT INTO movimiento_kardex (
     id, producto_id, ubicacion_id, tipo, cantidad_base, costo_unitario,
     documento_tipo, documento_id, movimiento_ref_id, lote_id, motivo,
@@ -346,8 +338,8 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
-        'e0000000-0000-0000-0000-000000000001', -- alipio.admin
+        'Carga de inventario inicial - Almacén Principal Demo',
+        'e0000000-0000-0000-0000-000000000001', -- demo.admin
         NULL,
         '2026-10-01 06:00:00-05',
         '2026-10-01 06:00:00-05'
@@ -364,7 +356,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
+        'Carga de inventario inicial - Almacén Principal Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -382,7 +374,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
+        'Carga de inventario inicial - Almacén Principal Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -400,7 +392,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
+        'Carga de inventario inicial - Almacén Principal Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -418,7 +410,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
+        'Carga de inventario inicial - Almacén Principal Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -436,7 +428,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Almacén Principal Pisco',
+        'Carga de inventario inicial - Almacén Principal Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -444,7 +436,7 @@ VALUES
     )
 ON CONFLICT (id) DO NOTHING;
 
--- 4.2 Asientos de Kárdex: Stock Inicial en Depósito San Clemente
+-- 4.2 Asientos de Kárdex: Stock Inicial en Depósito Demo
 INSERT INTO movimiento_kardex (
     id, producto_id, ubicacion_id, tipo, cantidad_base, costo_unitario,
     documento_tipo, documento_id, movimiento_ref_id, lote_id, motivo,
@@ -463,7 +455,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -481,7 +473,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -499,7 +491,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -517,7 +509,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -535,7 +527,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -553,7 +545,7 @@ VALUES
         NULL,
         NULL,
         NULL,
-        'Carga de inventario inicial - Depósito San Clemente',
+        'Carga de inventario inicial - Depósito Demo',
         'e0000000-0000-0000-0000-000000000001',
         NULL,
         '2026-10-01 06:00:00-05',
@@ -565,13 +557,13 @@ ON CONFLICT (id) DO NOTHING;
 -- 5. CARGA DE DISTRIBUCIÓN MATUTINA ACTIVA (EN RUTA)
 -- ------------------------------------------------------------------------------
 -- Código: 'CARGA-20261001-001'
--- Conductor: vendedor1 (e0000000-0000-0000-0000-000000000004)
--- Vehículo: Camión V7X-842
--- Origen: Almacén Principal Pisco
--- Destino lógico: Bodega Móvil BM-V7X-842
+-- Conductor: demo.vendedor (e0000000-0000-0000-0000-000000000004)
+-- Vehículo: Camión DEM-001
+-- Origen: Almacén Principal Demo
+-- Destino lógico: Bodega Móvil BM-DEM-001
 -- ------------------------------------------------------------------------------
 
--- Finalizar cualquier carga previa residual de pruebas para vendedor1
+-- Finalizar cualquier carga previa residual de pruebas para demo.vendedor
 UPDATE carga_distribucion 
 SET estado = 'FINALIZADA', fecha_cierre = NOW() 
 WHERE trabajador_id = 'e0000000-0000-0000-0000-000000000004' 
@@ -586,16 +578,16 @@ INSERT INTO carga_distribucion (
 VALUES (
     'da100000-0000-0000-0000-000000000001',
     'CARGA-20261001-001',
-    'a1000000-0000-0000-0000-000000000001', -- Almacén Principal Pisco
-    'fe100000-0000-0000-0000-000000000001', -- Vehículo V7X-842
-    'e0000000-0000-0000-0000-000000000004', -- vendedor1
-    'a1000000-0000-0000-0000-000000000003', -- Bodega Móvil BM-V7X-842
+    'a1000000-0000-0000-0000-000000000001', -- Almacén Principal Demo
+    'fe100000-0000-0000-0000-000000000001', -- Vehículo DEM-001
+    'e0000000-0000-0000-0000-000000000004', -- demo.vendedor
+    'a1000000-0000-0000-0000-000000000003', -- Bodega Móvil BM-DEM-001
     'EN_RUTA',
     NOW(),
     NULL,
-    'Despacho matutino Ruta Valle de Pisco - Demostración Comercial Sr. Alipio',
-    'e0000000-0000-0000-0000-000000000001', -- Creado por Sr. Alipio
-    'e0000000-0000-0000-0000-000000000003', -- Despachado por almacen1
+    'Despacho matutino Ruta Demo - Demostración Comercial',
+    'e0000000-0000-0000-0000-000000000001', -- Creado por demo.admin
+    'e0000000-0000-0000-0000-000000000003', -- Despachado por demo.almacen
     NOW(),
     NOW()
 )
@@ -620,7 +612,7 @@ VALUES
         30.000,
         0.000,
         1500.000,
-        '30 sacos para entrega a Fundo Santa Rosa y clientes de ruta'
+        '30 sacos para entrega a clientes demo de ruta'
     ),
     -- 15 sacos de Fosfato Diamónico = 750 kg
     (
@@ -658,9 +650,9 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 5.2 Asientos de Kárdex: Despacho Atómico de Carga a Ruta (ASIGNACION_DISTRIBUCION)
--- Descuenta del Almacén Principal Pisco (-) y Acredita en Bodega Móvil (+)
+-- Descuenta del Almacén Principal Demo (-) y Acredita en Bodega Móvil (+)
 
--- SALIDAS del Almacén Principal Pisco:
+-- SALIDAS del Almacén Principal Demo:
 INSERT INTO movimiento_kardex (
     id, producto_id, ubicacion_id, tipo, cantidad_base, costo_unitario,
     documento_tipo, documento_id, movimiento_ref_id, lote_id, motivo,
@@ -679,8 +671,8 @@ VALUES
         'da100000-0000-0000-0000-000000000001',
         NULL,
         NULL,
-        'Carga a ruta - Vehículo V7X-842 (CARGA-20261001-001)',
-        'e0000000-0000-0000-0000-000000000003', -- almacen1
+        'Carga a ruta - Vehículo DEM-001 (CARGA-20261001-001)',
+        'e0000000-0000-0000-0000-000000000003', -- demo.almacen
         NULL,
         '2026-10-01 07:45:00-05',
         '2026-10-01 07:45:00-05'
@@ -697,7 +689,7 @@ VALUES
         'da100000-0000-0000-0000-000000000001',
         NULL,
         NULL,
-        'Carga a ruta - Vehículo V7X-842 (CARGA-20261001-001)',
+        'Carga a ruta - Vehículo DEM-001 (CARGA-20261001-001)',
         'e0000000-0000-0000-0000-000000000003',
         NULL,
         '2026-10-01 07:45:00-05',
@@ -715,7 +707,7 @@ VALUES
         'da100000-0000-0000-0000-000000000001',
         NULL,
         NULL,
-        'Carga a ruta - Vehículo V7X-842 (CARGA-20261001-001)',
+        'Carga a ruta - Vehículo DEM-001 (CARGA-20261001-001)',
         'e0000000-0000-0000-0000-000000000003',
         NULL,
         '2026-10-01 07:45:00-05',
@@ -733,7 +725,7 @@ VALUES
         'da100000-0000-0000-0000-000000000001',
         NULL,
         NULL,
-        'Carga a ruta - Vehículo V7X-842 (CARGA-20261001-001)',
+        'Carga a ruta - Vehículo DEM-001 (CARGA-20261001-001)',
         'e0000000-0000-0000-0000-000000000003',
         NULL,
         '2026-10-01 07:45:00-05',
@@ -741,7 +733,7 @@ VALUES
     )
 ON CONFLICT (id) DO NOTHING;
 
--- ENTRADAS a Bodega Móvil BM-V7X-842 (enlazadas con movimiento_ref_id):
+-- ENTRADAS a Bodega Móvil BM-DEM-001 (enlazadas con movimiento_ref_id):
 INSERT INTO movimiento_kardex (
     id, producto_id, ubicacion_id, tipo, cantidad_base, costo_unitario,
     documento_tipo, documento_id, movimiento_ref_id, lote_id, motivo,
@@ -826,21 +818,21 @@ ON CONFLICT (id) DO NOTHING;
 -- 6. ACTUALIZACIÓN SINCRONIZADA DE STOCK_SALDO
 -- ------------------------------------------------------------------------------
 -- El saldo físico materializado es idéntico a la suma algebraica de Kárdex:
--- Almacén Principal Pisco:
+-- Almacén Principal Demo:
 --   Urea:           10,000 - 1,500 = 8,500 kg
 --   Fosfato DAP:     7,500 -   750 = 6,750 kg
 --   Mancozeb 80%:      800 -     0 =   800 kg
 --   Cipermetrina:      600 -    60 =   540 L
 --   Bioestimulante:    480 -    60 =   420 L
 --   Glifosato:         600 -     0 =   600 L
--- Depósito San Clemente:
+-- Depósito Demo:
 --   Urea:           2,500 kg
 --   Fosfato DAP:    1,500 kg
 --   Mancozeb 80%:     200 kg
 --   Cipermetrina:     180 L
 --   Bioestimulante:   120 L
 --   Glifosato:        200 L
--- Bodega Móvil BM-V7X-842:
+-- Bodega Móvil BM-DEM-001:
 --   Urea:           1,500 kg
 --   Fosfato DAP:      750 kg
 --   Cipermetrina:      60 L
@@ -849,7 +841,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO stock_saldo (producto_id, ubicacion_id, cantidad_fisica, cantidad_reservada, actualizado_en)
 VALUES 
-    -- Almacén Principal Pisco
+    -- Almacén Principal Demo
     ('ba100000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 8500.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000001', 6750.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000001',  800.000, 0.000, NOW()),
@@ -857,7 +849,7 @@ VALUES
     ('ba100000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000001',  420.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000006', 'a1000000-0000-0000-0000-000000000001',  600.000, 0.000, NOW()),
 
-    -- Depósito San Clemente
+    -- Depósito Demo
     ('ba100000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000002', 2500.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000002', 1500.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000002',  200.000, 0.000, NOW()),
@@ -865,7 +857,7 @@ VALUES
     ('ba100000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000002',  120.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000006', 'a1000000-0000-0000-0000-000000000002',  200.000, 0.000, NOW()),
 
-    -- Bodega Móvil BM-V7X-842 (Stock en ruta disponible para venta móvil)
+    -- Bodega Móvil BM-DEM-001 (Stock en ruta disponible para venta móvil)
     ('ba100000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000003', 1500.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000003',  750.000, 0.000, NOW()),
     ('ba100000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-000000000003',   60.000, 0.000, NOW()),

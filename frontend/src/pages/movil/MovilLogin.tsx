@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Smartphone, ShieldCheck, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
 import { authApi } from '../../api/services';
 import { useAuthStore } from '../../store/authStore';
 import { useMobileStore } from '../../store/mobileStore';
 
+// Solo en `vite dev` con VITE_ENABLE_DEMO_ACCOUNTS=true (ver components/DemoAccountsPanel.tsx).
+const DemoAccountsPanel =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS === 'true'
+    ? lazy(() => import('../../components/DemoAccountsPanel'))
+    : null;
+
 export const MovilLogin: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const { codigoDispositivo, vincularTerminal, ejecutarPull } = useMobileStore();
 
-  const [username, setUsername] = useState('vendedor1');
-  const [password, setPassword] = useState('AgroControl2026*');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +89,7 @@ export const MovilLogin: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                placeholder="Ej. vendedor1"
+                autoComplete="username"
               />
             </div>
           </div>
@@ -102,7 +108,7 @@ export const MovilLogin: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                placeholder="••••••••"
+                autoComplete="current-password"
               />
             </div>
           </div>
@@ -126,23 +132,24 @@ export const MovilLogin: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              setUsername('vendedor1');
-              setPassword('AgroControl2026*');
-            }}
-            className="text-xs text-slate-400 hover:text-emerald-400 font-medium underline"
-          >
-            Usar cuenta de demostración: vendedor1
-          </button>
-        </div>
+        {DemoAccountsPanel && (
+          <Suspense fallback={null}>
+            <DemoAccountsPanel
+              variante="oscuro"
+              soloUsuarios={['demo.vendedor']}
+              usernameActual={username}
+              onSeleccionar={(u, p) => {
+                setUsername(u);
+                setPassword(p);
+              }}
+            />
+          </Suspense>
+        )}
       </div>
 
       <div className="text-center mt-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/login')}
           className="text-xs text-slate-400 hover:text-slate-300 flex items-center justify-center gap-1 mx-auto"
         >
           <span>Ir a la consola de administración en PC</span>

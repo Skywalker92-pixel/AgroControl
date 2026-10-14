@@ -343,7 +343,7 @@ export const Clientes: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="ej. 956123456"
+                    placeholder="ej. 900000000"
                     value={formCliente.telefono}
                     onChange={(e) =>
                       setFormCliente({ ...formCliente, telefono: e.target.value })

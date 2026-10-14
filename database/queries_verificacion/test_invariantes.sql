@@ -37,7 +37,7 @@ VALUES (
     'a0000000-0000-0000-0000-000000000001', -- Almacén Central
     'ENTRADA',
     120.000,
-    'e0000000-0000-0000-0000-000000000001', -- Admin Alipio
+    'e0000000-0000-0000-0000-000000000001', -- Administrador demo (seed de pruebas)
     now(),
     'Ingreso inicial de prueba'
 ) ON CONFLICT (id) DO NOTHING;

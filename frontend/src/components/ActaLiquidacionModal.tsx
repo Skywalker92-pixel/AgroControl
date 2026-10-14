@@ -1,6 +1,7 @@
 import React from 'react';
 import { Printer, X, FileCheck2, AlertTriangle, ShieldCheck, CheckCircle } from 'lucide-react';
 import { ActaLiquidacion } from '../types';
+import { EMPRESA, lineaIdentificacionEmpresa } from '../config/empresa';
 
 interface ActaLiquidacionModalProps {
   acta: ActaLiquidacion | null;
@@ -80,14 +81,14 @@ export const ActaLiquidacionModal: React.FC<ActaLiquidacionModalProps> = ({
           <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                AGROCONTROL PRO
+                {EMPRESA.nombre}
               </h1>
               <p className="text-xs font-semibold text-slate-700">
                 Insumos Agrícolas, Semillas y Fertilizantes
               </p>
-              <p className="text-xs text-slate-500">
-                RUC: 20608945123 | Central Administrativa – Pisco, Ica, Perú
-              </p>
+              {lineaIdentificacionEmpresa() && (
+                <p className="text-xs text-slate-500">{lineaIdentificacionEmpresa()}</p>
+              )}
             </div>
             <div className="text-right border-2 border-slate-900 p-3 rounded-lg bg-slate-50 shadow-sm min-w-[240px]">
               <span className="text-[10px] uppercase font-black text-slate-600 tracking-wider block">

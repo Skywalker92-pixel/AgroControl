@@ -38,12 +38,12 @@ describe('Hito 2: Catálogo, Unidades Base, Presentaciones, Precios y Clientes (
     // 1. Obtener tokens de prueba
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const vendedorLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = vendedorLogin.body.access_token;
 
     // 2. Obtener listas de precios precargadas en el seed
@@ -179,7 +179,7 @@ describe('Hito 2: Catálogo, Unidades Base, Presentaciones, Precios y Clientes (
         numero_documento: numRuc,
         razon_social: 'Distribuidora Agrícola del Norte SAC',
         direccion: 'Av. Panamericana Norte Km 520',
-        telefono: '987654321',
+        telefono: '900000001',
         email: 'ventas@agronorte.local',
         lista_precio_id: listaMayoristaId,
       })

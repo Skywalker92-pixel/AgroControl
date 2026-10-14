@@ -1,6 +1,10 @@
 -- ==============================================================================
--- AGROCONTROL PRO - SEED DE DATOS INICIALES (FASE 1: NÚCLEO)
--- Archivo: 001_seed_fase1.sql
+-- AGROCONTROL PRO - SEED DE DATOS BASE (REFERENCIA)
+-- Archivo: 000_seed_base.sql
+-- ==============================================================================
+-- Datos de referencia mínimos y genéricos (ubicaciones iniciales, categorías y
+-- listas de precio). NO crea usuarios: es seguro para producción.
+-- El administrador inicial se crea con database/bootstrap/001_admin_inicial.sql
 -- ==============================================================================
 
 -- 1. ALMACÉN PRINCIPAL Y ZONA DE ALMACENAMIENTO INICIAL
@@ -32,46 +36,3 @@ VALUES
     ('b0000000-0000-0000-0000-000000000002', 'MINORISTA', 'Lista Minorista', 'Precio de venta al público en mostrador', TRUE)
 ON CONFLICT (codigo) DO NOTHING;
 
--- 4. USUARIOS INICIALES CON LOS 4 ROLES DEL DOMINIO
--- Contraseña inicial para todos los usuarios de prueba: 'AgroControl2026*'
--- Hash verificado generado con bcrypt: $2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW
-INSERT INTO usuario (id, username, password_hash, nombre_completo, email, rol, activo)
-VALUES 
-    (
-        'e0000000-0000-0000-0000-000000000001', 
-        'alipio.admin', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Sr. Alipio (Propietario)', 
-        'alipio@agrocontrol.local', 
-        'ADMINISTRADOR_PROPIETARIO', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000002', 
-        'esposa.admin', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Administradora Secundaria', 
-        'administracion@agrocontrol.local', 
-        'ADMINISTRADOR_SECUNDARIO', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000003', 
-        'almacen1', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Operador de Almacén Principal', 
-        'almacen@agrocontrol.local', 
-        'OPERADOR_ALMACEN', 
-        TRUE
-    ),
-    (
-        'e0000000-0000-0000-0000-000000000004', 
-        'vendedor1', 
-        '$2a$10$57l7YcVhHxV6.8K4MmcypeKsiXKXoBxo/AUwChJBeI52lfv/KFFDW', 
-        'Vendedor en Ruta', 
-        'vendedor1@agrocontrol.local', 
-        'VENDEDOR', 
-        TRUE
-    )
-ON CONFLICT (username) DO UPDATE
-SET password_hash = EXCLUDED.password_hash;

@@ -1,14 +1,56 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sprout, Lock, User, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import React, { lazy, Suspense, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  Sprout,
+  Lock,
+  User,
+  AlertCircle,
+  ArrowRight,
+  ShieldCheck,
+  BookLock,
+  Truck,
+  Smartphone,
+  Monitor,
+} from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../api/services';
+
+// Accesos rápidos a cuentas ficticias: solo en `vite dev` con VITE_ENABLE_DEMO_ACCOUNTS=true.
+// En una build de producción la condición es `false` en tiempo de compilación y el
+// módulo no se incluye.
+const DemoAccountsPanel =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS === 'true'
+    ? lazy(() => import('../components/DemoAccountsPanel'))
+    : null;
+
+const CAPACIDADES = [
+  {
+    icon: BookLock,
+    titulo: 'Kárdex append-only',
+    detalle: 'Movimientos protegidos por triggers de PostgreSQL y conciliación con saldos.',
+  },
+  {
+    icon: Truck,
+    titulo: 'Despacho, distribución y liquidación',
+    detalle: 'Cargas por vehículo, bodegas móviles y cierre de ruta.',
+  },
+  {
+    icon: Smartphone,
+    titulo: 'Terminales móviles autorizadas',
+    detalle: 'Sincronización idempotente con la PWA offline de los vendedores.',
+  },
+  {
+    icon: ShieldCheck,
+    titulo: 'Control de acceso por roles',
+    detalle: 'Permisos validados en el servidor para cada operación.',
+  },
+];
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  const [username, setUsername] = useState('alipio.admin');
-  const [password, setPassword] = useState('AgroControl2026*');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -22,7 +64,7 @@ export const Login: React.FC = () => {
       login(res.access_token, res.usuario);
       navigate('/');
     } catch (err: any) {
-      console.error('Error al iniciar sesión:', err);
+      // No se registra el objeto de error: incluye el cuerpo de la petición (contraseña).
       setError(
         err.response?.data?.message ||
           'Credenciales incorrectas. Verifique su usuario y contraseña.',
@@ -32,150 +74,168 @@ export const Login: React.FC = () => {
     }
   };
 
-  const seleccionarUsuarioRapido = (user: string) => {
-    setUsername(user);
-    setPassword('AgroControl2026*');
-  };
-
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-        {/* Cabecera con Logotipo */}
-        <div className="bg-slate-950 p-8 text-center border-b border-slate-800">
-          <div className="w-14 h-14 bg-emerald-600 rounded-xl mx-auto flex items-center justify-center text-white shadow-xl shadow-emerald-950/60 mb-3">
-            <Sprout className="w-8 h-8" />
+    <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row">
+      {/* Panel institucional (escritorio) / cabecera compacta (tablet y móvil) */}
+      <aside className="relative overflow-hidden bg-slate-950 text-white lg:w-[46%] xl:w-1/2 flex flex-col justify-between px-6 py-6 sm:px-10 lg:px-14 lg:py-12">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.25),transparent_45%),radial-gradient(circle_at_85%_90%,rgba(5,150,105,0.18),transparent_40%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.06] bg-[linear-gradient(rgba(255,255,255,1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,1)_1px,transparent_1px)] bg-[size:48px_48px]"
+        />
+
+        <div className="relative flex items-center gap-3">
+          <div className="w-11 h-11 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-950/60">
+            <Sprout className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">
-            AgroControl <span className="text-emerald-400">Pro</span>
+          <div>
+            <div className="text-lg font-black tracking-tight leading-none">
+              AgroControl <span className="text-emerald-400">Pro</span>
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1">Sistema Administrativo Central</div>
+          </div>
+        </div>
+
+        <div className="relative hidden lg:block my-10">
+          <h1 className="text-3xl xl:text-4xl font-black tracking-tight leading-tight max-w-lg">
+            Inventario, despacho y distribución en un solo lugar.
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Sistema Administrativo Central – PC del Local Comercial
+          <p className="mt-4 text-sm text-slate-400 max-w-md">
+            Consola de gestión para la PC del local comercial: catálogo, stock, Kárdex, pedidos,
+            rutas de reparto, liquidaciones y reportes.
           </p>
+
+          <ul className="mt-10 grid gap-5 max-w-lg">
+            {CAPACIDADES.map(({ icon: Icon, titulo, detalle }) => (
+              <li key={titulo} className="flex items-start gap-3.5">
+                <div className="w-9 h-9 shrink-0 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                  <Icon className="w-[18px] h-[18px] text-emerald-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">{titulo}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{detalle}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
 
-        {/* Formulario */}
-        <div className="p-8">
-          {error && (
-            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2.5 text-xs text-rose-800 font-medium">
-              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+        <div className="relative hidden lg:flex items-center gap-2 text-[11px] text-slate-500">
+          <Monitor className="w-3.5 h-3.5" />
+          <span>Versión 1.0.0-rc1 · Uso exclusivo del personal autorizado</span>
+        </div>
+      </aside>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Usuario del Sistema
-              </label>
-              <div className="relative">
-                <User className="w-5 h-5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="ej. alipio.admin"
-                  className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
+      {/* Formulario de acceso */}
+      <main className="flex-1 flex items-center justify-center px-4 py-10 sm:px-8">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl shadow-slate-300/40 border border-slate-200 p-6 sm:p-9">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Iniciar sesión</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Ingrese con su usuario asignado por el administrador.
+            </p>
+
+            {error && (
+              <div
+                role="alert"
+                className="mt-6 p-3.5 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2.5 text-xs text-rose-800 font-medium"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{error}</span>
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Contraseña
-              </label>
-              <div className="relative">
-                <Lock className="w-5 h-5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
+            <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+              <div>
+                <label
+                  htmlFor="login-usuario"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+                >
+                  Usuario
+                </label>
+                <div className="relative">
+                  <User className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="login-usuario"
+                    type="text"
+                    required
+                    autoComplete="username"
+                    autoFocus
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md shadow-emerald-900/30 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
-            >
-              {isLoading ? (
-                'Iniciando sesión...'
-              ) : (
-                <>
-                  <span>Ingresar al Sistema</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
+              <div>
+                <label
+                  htmlFor="login-password"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+                >
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <Lock className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="login-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
 
-          {/* Accesos rápidos locales para demostración y cambio de rol */}
-          <div className="mt-8 pt-5 border-t border-slate-100">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2 text-center">
-              Usuarios Preconfigurados (Habilitados en Base de Datos):
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md shadow-emerald-900/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+              >
+                {isLoading ? (
+                  'Verificando credenciales...'
+                ) : (
+                  <>
+                    <span>Ingresar al sistema</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {DemoAccountsPanel && (
+              <Suspense fallback={null}>
+                <DemoAccountsPanel
+                  usernameActual={username}
+                  onSeleccionar={(u, p) => {
+                    setUsername(u);
+                    setPassword(p);
+                  }}
+                />
+              </Suspense>
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              Acceso con control de roles (RBAC)
             </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => seleccionarUsuarioRapido('alipio.admin')}
-                className={`p-2 rounded border text-left transition-colors ${
-                  username === 'alipio.admin'
-                    ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="font-semibold">Sr. Alipio</div>
-                <div className="text-[10px] text-slate-500">Propietario / Admin</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => seleccionarUsuarioRapido('esposa.admin')}
-                className={`p-2 rounded border text-left transition-colors ${
-                  username === 'esposa.admin'
-                    ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="font-semibold">Esposa</div>
-                <div className="text-[10px] text-slate-500">Admin Secundario</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => seleccionarUsuarioRapido('almacen1')}
-                className={`p-2 rounded border text-left transition-colors ${
-                  username === 'almacen1'
-                    ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="font-semibold">Operario Almacén</div>
-                <div className="text-[10px] text-slate-500">Carga y Despacho</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => seleccionarUsuarioRapido('vendedor1')}
-                className={`p-2 rounded border text-left transition-colors ${
-                  username === 'vendedor1'
-                    ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="font-semibold">Vendedor</div>
-                <div className="text-[10px] text-slate-500">Proformas / Pedidos</div>
-              </button>
-            </div>
+            <Link
+              to="/movil/login"
+              className="flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Vendedores: módulo móvil
+            </Link>
           </div>
         </div>
-
-        <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Seguridad RBAC activa con tokens JWT emitidos en la PC local</span>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };

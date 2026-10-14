@@ -12,7 +12,6 @@ describe('Hito 3: Ubicaciones Físicas, Motor de Kárdex Inmutable y Control de 
   let vendedorToken: string;
 
   let almacenId: string;
-  let zonaId: string;
   let categoriaId: string;
   let productoId: string;
 
@@ -37,17 +36,17 @@ describe('Hito 3: Ubicaciones Físicas, Motor de Kárdex Inmutable y Control de 
     // 1. Obtener tokens de autenticación
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const venLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = venLogin.body.access_token;
 
     // 2. Crear categoría y producto base para las pruebas
@@ -86,7 +85,7 @@ describe('Hito 3: Ubicaciones Físicas, Motor de Kárdex Inmutable y Control de 
         .send({
           tipo: 'ALMACEN',
           codigo: codigoAlmacen,
-          nombre: 'Almacén Central Pisco',
+          nombre: 'Almacén Central Demo',
         })
         .expect(201);
 
@@ -124,7 +123,7 @@ describe('Hito 3: Ubicaciones Físicas, Motor de Kárdex Inmutable y Control de 
       expect(res.body.id).toBeDefined();
       expect(res.body.tipo).toBe('ZONA');
       expect(res.body.padre_id).toBe(almacenId);
-      zonaId = res.body.id;
+      expect(res.body.id).toBeDefined();
     });
   });
 

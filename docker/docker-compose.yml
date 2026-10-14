@@ -21,6 +21,13 @@ services:
       POSTGRES_USER: ${DB_USER:-agrocontrol_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD requerido}
       PGDATA: /var/lib/postgresql/data/pgdata
+      # Bootstrap de primera instalación (solo actúa cuando el volumen está vacío).
+      # Tras crear el administrador, elimine INITIAL_ADMIN_PASSWORD del .env.
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-propietario}
+      INITIAL_ADMIN_NOMBRE: ${INITIAL_ADMIN_NOMBRE:-Administrador Propietario}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      # Datos FICTICIOS de demostración: desactivado por defecto (nunca en producción).
+      ENABLE_DEMO_SEED: ${ENABLE_DEMO_SEED:-false}
     ports:
       # Se expone en el puerto 5433 del host por defecto para evitar colisiones con otros Postgres
       - "${HOST_DB_PORT:-5433}:5432"
@@ -28,6 +35,8 @@ services:
       - agrocontrol_pgdata:/var/lib/postgresql/data
       # Scripts de inicialización ejecutados automáticamente al crear la base de datos por primera vez (OBS-DEP-01)
       - ../database/init:/docker-entrypoint-initdb.d:ro
+      - ../database/bootstrap:/docker-entrypoint-bootstrap:ro
+      - ../database/seeds:/docker-entrypoint-seeds:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-agrocontrol_user} -d ${DB_NAME:-agrocontrol_db}"]
       interval: 10s
@@ -52,6 +61,9 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
+      # Obligatorio con NODE_ENV=production: URL(s) exactas desde donde se abre la web
+      # (p. ej. http://192.168.1.10:8080). Separadas por comas, sin comodines.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql://agrocontrol_user:${DB_PASSWORD:?DB_PASSWORD requerido}@agrocontrol-db:5432/agrocontrol_db?schema=public}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requerido}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
@@ -79,7 +91,6 @@ services:
     ports:
       - "${HOST_WEB_PORT:-80}:80"
     volumes:
-
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - agrocontrol-net

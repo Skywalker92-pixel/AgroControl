@@ -49,20 +49,20 @@ describe('Hito 13: Sincronización, Gestión de Conflictos y Auditoría Administ
     // 1. Obtener tokens para cada rol
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
-    adminUser = await prisma.usuario.findUnique({ where: { username: 'alipio.admin' } });
+    adminUser = await prisma.usuario.findUnique({ where: { username: 'demo.admin' } });
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const v1Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedorToken = v1Login.body.access_token;
-    vendedorUser = await prisma.usuario.findUnique({ where: { username: 'vendedor1' } });
+    vendedorUser = await prisma.usuario.findUnique({ where: { username: 'demo.vendedor' } });
 
     // 2. Almacén principal
     const almacen = await prisma.ubicacion.findFirst({
@@ -113,7 +113,7 @@ describe('Hito 13: Sincronización, Gestión de Conflictos y Auditoría Administ
       ON CONFLICT (producto_id, ubicacion_id) DO UPDATE SET cantidad_fisica = stock_saldo.cantidad_fisica + 500;
     `;
 
-    // 4. Crear Vehículo y Carga de Distribución para vendedor1
+    // 4. Crear Vehículo y Carga de Distribución para demo.vendedor
     const vehRes = await request(app.getHttpServer())
       .post('/api/distribucion/vehiculos')
       .set('Authorization', `Bearer ${adminToken}`)

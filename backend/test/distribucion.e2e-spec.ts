@@ -12,7 +12,6 @@ describe('Hito 8: Vehículos, Carga de Distribución y Bodega Móvil Lógica (e2
   let vendedor1Token: string;
   let vendedor2Token: string;
   let vendedor1Id: string;
-  let vendedor2Id: string;
 
   let almacenOrigenId: string;
   let categoriaId: string;
@@ -46,21 +45,21 @@ describe('Hito 8: Vehículos, Carga de Distribución y Bodega Móvil Lógica (e2
     // 1. Obtener tokens de autenticación
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
     adminToken = adminLogin.body.access_token;
 
     const opLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'almacen1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.almacen', password: 'Demo-NoProduccion-2026' });
     operadorToken = opLogin.body.access_token;
 
     const v1Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor1', password: 'AgroControl2026*' });
+      .send({ username: 'demo.vendedor', password: 'Demo-NoProduccion-2026' });
     vendedor1Token = v1Login.body.access_token;
     
     // Consultar directamente los IDs de usuarios para que no dependan del payload de login
-    const uVendedor1 = await prisma.usuario.findUnique({ where: { username: 'vendedor1' } });
+    const uVendedor1 = await prisma.usuario.findUnique({ where: { username: 'demo.vendedor' } });
     vendedor1Id = uVendedor1 ? uVendedor1.id : '';
 
     // Asegurar existencia de vendedor2
@@ -69,7 +68,7 @@ describe('Hito 8: Vehículos, Carga de Distribución y Bodega Móvil Lógica (e2
     });
     if (!v2User) {
       const bcrypt = require('bcryptjs');
-      const hash = await bcrypt.hash('AgroControl2026*', 10);
+      const hash = await bcrypt.hash('Demo-NoProduccion-2026', 10);
       v2User = await prisma.usuario.create({
         data: {
           username: 'vendedor2',
@@ -81,11 +80,11 @@ describe('Hito 8: Vehículos, Carga de Distribución y Bodega Móvil Lógica (e2
         },
       });
     }
-    vendedor2Id = v2User.id;
+    expect(v2User.id).toBeDefined();
 
     const v2Login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'vendedor2', password: 'AgroControl2026*' });
+      .send({ username: 'vendedor2', password: 'Demo-NoProduccion-2026' });
     vendedor2Token = v2Login.body.access_token;
 
     // 2. Crear categoría y producto base
@@ -124,7 +123,7 @@ describe('Hito 8: Vehículos, Carga de Distribución y Bodega Móvil Lógica (e2
       data: {
         tipo: 'ALMACEN',
         codigo: `ALM-CENTRAL-${Date.now().toString().slice(-4)}`,
-        nombre: 'Almacén Central Pisco',
+        nombre: 'Almacén Central Demo',
       },
     });
     almacenOrigenId = alm.id;

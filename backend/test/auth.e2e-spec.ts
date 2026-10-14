@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from '../src/core/prisma/prisma.service';
+import { validateEnvironment } from '../src/core/config/env.validation';
 
 describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
   let app: INestApplication;
@@ -33,18 +34,18 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
     await app.close();
   });
 
-  it('1. [a] POST /api/auth/login -> Login exitoso con el administrador del seed (alipio.admin)', async () => {
+  it('1. [a] POST /api/auth/login -> Login exitoso con el administrador del seed (demo.admin)', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        username: 'alipio.admin',
-        password: 'AgroControl2026*',
+        username: 'demo.admin',
+        password: 'Demo-NoProduccion-2026',
       })
       .expect(200);
 
     expect(response.body).toHaveProperty('access_token');
     expect(response.body.token_type).toBe('Bearer');
-    expect(response.body.usuario.username).toBe('alipio.admin');
+    expect(response.body.usuario.username).toBe('demo.admin');
     expect(response.body.usuario.rol).toBe('ADMINISTRADOR_PROPIETARIO');
 
     adminToken = response.body.access_token;
@@ -56,7 +57,7 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(response.body.username).toBe('alipio.admin');
+    expect(response.body.username).toBe('demo.admin');
     expect(response.body.rol).toBe('ADMINISTRADOR_PROPIETARIO');
     expect(response.body.activo).toBe(true);
   });
@@ -81,19 +82,19 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
       .expect(200);
 
     expect(response.body.rol).toBe('ADMINISTRADOR_PROPIETARIO');
-    expect(response.body.ejecutado_por).toBe('alipio.admin');
+    expect(response.body.ejecutado_por).toBe('demo.admin');
   });
 
-  it('5. Login con rol VENDEDOR (vendedor1) y obtención de su token', async () => {
+  it('5. Login con rol VENDEDOR (demo.vendedor) y obtención de su token', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        username: 'vendedor1',
-        password: 'AgroControl2026*',
+        username: 'demo.vendedor',
+        password: 'Demo-NoProduccion-2026',
       })
       .expect(200);
 
-    expect(response.body.usuario.username).toBe('vendedor1');
+    expect(response.body.usuario.username).toBe('demo.vendedor');
     expect(response.body.usuario.rol).toBe('VENDEDOR');
 
     vendedorToken = response.body.access_token;
@@ -113,7 +114,7 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        username: 'alipio.admin',
+        username: 'demo.admin',
         password: 'PasswordIncorrecta999',
       })
       .expect(401);
@@ -127,19 +128,19 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
 
     expect(eventosAuditoria.length).toBeGreaterThan(0);
 
-    // Verificar que existe evento EXITOSO para alipio.admin
+    // Verificar que existe evento EXITOSO para demo.admin
     const eventoExitosoAdmin = eventosAuditoria.find(
       (e) =>
         (e.valor_nuevo as any)?.resultado === 'EXITOSO' &&
-        (e.valor_nuevo as any)?.username === 'alipio.admin',
+        (e.valor_nuevo as any)?.username === 'demo.admin',
     );
     expect(eventoExitosoAdmin).toBeDefined();
 
-    // Verificar que existe evento EXITOSO para vendedor1
+    // Verificar que existe evento EXITOSO para demo.vendedor
     const eventoExitosoVendedor = eventosAuditoria.find(
       (e) =>
         (e.valor_nuevo as any)?.resultado === 'EXITOSO' &&
-        (e.valor_nuevo as any)?.username === 'vendedor1',
+        (e.valor_nuevo as any)?.username === 'demo.vendedor',
     );
     expect(eventoExitosoVendedor).toBeDefined();
 
@@ -179,16 +180,14 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
   // OBS-SEC-01: Validación Fail-Fast para JWT_SECRET
   // ============================================================================
   it('10. [OBS-SEC-01] Fail-fast al arrancar si JWT_SECRET no es seguro (< 16 caracteres)', () => {
-    const validarSecreto = (secreto?: string) => {
-      if (!secreto || secreto.length < 16) {
-        throw new Error('FATAL: JWT_SECRET no configurado en entorno');
-      }
-      return true;
-    };
+    // Usa la validación real de arranque (src/core/config/env.validation.ts).
+    const base = { NODE_ENV: 'test', DATABASE_URL: 'postgresql://u:p@localhost:5432/db' };
+    const validarSecreto = (secreto?: string) =>
+      validateEnvironment({ ...base, JWT_SECRET: secreto }).isProduction === false;
 
-    expect(() => validarSecreto(undefined)).toThrow('FATAL: JWT_SECRET no configurado en entorno');
-    expect(() => validarSecreto('')).toThrow('FATAL: JWT_SECRET no configurado en entorno');
-    expect(() => validarSecreto('corto_12345')).toThrow('FATAL: JWT_SECRET no configurado en entorno');
+    expect(() => validarSecreto(undefined)).toThrow('FATAL: JWT_SECRET no configurado');
+    expect(() => validarSecreto('')).toThrow('FATAL: JWT_SECRET no configurado');
+    expect(() => validarSecreto('corto_12345')).toThrow('FATAL: JWT_SECRET no configurado');
     expect(validarSecreto('secreto_largo_valido_2026_super_seguro')).toBe(true);
   });
 
@@ -200,17 +199,17 @@ describe('Hito 1: Auth, Roles (RBAC) y Auditoría (e2e)', () => {
     // Intento 4:
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
 
     // Intento 5 (límite alcanzado):
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
 
     // Intento 6 (supera el límite de 5 por minuto):
     const resThrottled = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ username: 'alipio.admin', password: 'AgroControl2026*' });
+      .send({ username: 'demo.admin', password: 'Demo-NoProduccion-2026' });
 
     expect(resThrottled.status).toBe(429);
   });

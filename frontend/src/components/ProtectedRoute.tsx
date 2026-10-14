@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { RolUsuario } from '../types';
 
@@ -7,11 +7,18 @@ interface ProtectedRouteProps {
   allowedRoles?: RolUsuario[];
 }
 
+/**
+ * Guardia de navegación (solo UX). La autorización real la aplica el backend
+ * en cada endpoint (JwtAuthGuard + RolesGuard).
+ */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   const { isAuthenticated, usuario } = useAuthStore();
+  const location = useLocation();
 
   if (!isAuthenticated || !usuario) {
-    return <Navigate to="/login" replace />;
+    // La superficie móvil tiene su propio login (vendedores en ruta).
+    const destino = location.pathname.startsWith('/movil') ? '/movil/login' : '/login';
+    return <Navigate to={destino} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(usuario.rol)) {
