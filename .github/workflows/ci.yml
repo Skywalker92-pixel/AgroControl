@@ -5,19 +5,42 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+# Mínimo privilegio para el GITHUB_TOKEN del workflow.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci-pipeline:
-    name: Build, Lint & Test (PostgreSQL 15 + NestJS + Vite)
+    name: Build, Lint, Audit & Test (PostgreSQL 15 + NestJS + Vite)
     runs-on: ubuntu-latest
+
+    # Credenciales EXCLUSIVAS de la base de datos efímera de CI. No son secretos:
+    # la base solo existe durante el job y no es accesible desde fuera del runner.
+    env:
+      NODE_ENV: test
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: agrocontrol_ci
+      PGPASSWORD: ci_only_ephemeral_db
+      PGDATABASE: agrocontrol_db
+      DATABASE_URL: postgresql://agrocontrol_ci:ci_only_ephemeral_db@localhost:5432/agrocontrol_db?schema=public
+      JWT_SECRET: ci-only-jwt-key-for-ephemeral-test-runs-0123456789
+      JWT_EXPIRES_IN: 8h
+      PORT: 3000
 
     services:
       postgres:
         image: postgres:15-alpine
         env:
           POSTGRES_DB: agrocontrol_db
-          POSTGRES_USER: agrocontrol_user
-          POSTGRES_PASSWORD: agrocontrol_secret_pass_2026
+          POSTGRES_USER: agrocontrol_ci
+          POSTGRES_PASSWORD: ci_only_ephemeral_db
         ports:
           - 5432:5432
         options: >-
@@ -26,64 +49,75 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://agrocontrol_user:agrocontrol_secret_pass_2026@localhost:5432/agrocontrol_db?schema=public
-      JWT_SECRET: super_seguro_jwt_secret_agrocontrol_2026_pro_token
-      JWT_EXPIRES_IN: 8h
-      PORT: 3000
-
     steps:
       - name: 1. Checkout de código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: 2. Configurar Node.js 20 LTS
-        uses: actions/setup-node@v4
+      - name: 2. Configurar Node.js 24 LTS
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
 
-      - name: 3. Esperar y ejecutar migraciones y seed inicial en PostgreSQL
+      - name: 3-4. Aplicar migraciones en PostgreSQL
         run: |
-          echo "Aplicando esquema y migraciones ordenadas..."
           for sql in database/migrations/*.sql; do
             echo "Ejecutando migración: $sql"
-            PGPASSWORD=agrocontrol_secret_pass_2026 psql -h localhost -p 5432 -U agrocontrol_user -d agrocontrol_db -f "$sql"
+            psql -v ON_ERROR_STOP=1 -q -f "$sql"
           done
-          echo "Ejecutando seed fase 1..."
-          PGPASSWORD=agrocontrol_secret_pass_2026 psql -h localhost -p 5432 -U agrocontrol_user -d agrocontrol_db -f "database/seeds/001_seed_fase1.sql"
 
-      - name: 4. Instalar dependencias del Backend
+      - name: 5. Cargar seed de pruebas (datos base + usuarios ficticios de test)
+        run: |
+          psql -v ON_ERROR_STOP=1 -q -f database/seeds/000_seed_base.sql
+          psql -v ON_ERROR_STOP=1 -q -f database/seeds/001_seed_usuarios_demo.sql
+
+      - name: 6. Instalar dependencias del Backend
         working-directory: backend
         run: npm ci
 
-      - name: 5. Generar Prisma Client
+      - name: 7. Auditoría de dependencias de producción del Backend (bloquea HIGH/CRITICAL)
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: 8. Generar Prisma Client
         working-directory: backend
         run: npx prisma generate
 
-      - name: 6. Ejecutar Linter del Backend
+      - name: 9. Linter del Backend (sin --fix, 0 warnings)
         working-directory: backend
         run: npm run lint
 
-      - name: 7. Compilar Backend
+      - name: 10. Compilar Backend
         working-directory: backend
         run: npm run build
 
-      - name: 8. Ejecutar Batería Completa de Pruebas E2E del Backend
+      - name: 11. Pruebas E2E del Backend
         working-directory: backend
         run: npm run test:e2e
 
-      - name: 9. Instalar dependencias del Frontend
+      - name: 12. Instalar dependencias del Frontend
         working-directory: frontend
         run: npm ci
 
-      - name: 10. Verificar Tipado Estricto de TypeScript en Frontend (OBS-QA-01)
+      - name: 13. Auditoría de dependencias de producción del Frontend (bloquea HIGH/CRITICAL)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: 14. Verificar tipado estricto de TypeScript en Frontend
         working-directory: frontend
         run: npm run typecheck
 
-      - name: 11. Compilar Frontend (TypeScript + Vite PWA)
+      - name: 15. Compilar Frontend (TypeScript + Vite PWA)
         working-directory: frontend
         run: npm run build
+
+      - name: 16. Verificar que la build no incluye cuentas demo ni CDNs externos
+        working-directory: frontend
+        run: |
+          if grep -rIl -E "demo\.admin|DemoAccountsPanel|fonts\.googleapis|images\.unsplash" dist; then
+            echo "::error::La build de producción contiene cuentas demo o recursos externos."
+            exit 1
+          fi
