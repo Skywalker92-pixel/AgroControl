@@ -364,7 +364,7 @@ describe('Hito 4: Traslados Atómicos entre Almacenes Físicos (e2e)', () => {
 
       // Chincha queda en: 40 - 15 = 25
       expect(res.body.origen.cantidad_fisica).toBe(25);
-      // Pisco queda en: 60 + 15 = 75
+      // El almacén principal queda en: 60 + 15 = 75
       expect(res.body.destino.cantidad_fisica).toBe(75);
 
       // Stock global consolidado sigue siendo 100

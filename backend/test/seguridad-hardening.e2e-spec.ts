@@ -54,7 +54,7 @@ describe('Hardening: configuración, IDOR, dispositivos revocados e idempotencia
 
     it('1.4 JWT_SECRET de demostración o de ejemplo se rechaza en producción', () => {
       for (const secreto of [
-        'super_seguro_jwt_secret_agrocontrol_2026_pro_token',
+        'super_seguro_jwt_secret_variante_de_prueba_0001',
         'CHANGE_ME_WITH_AT_LEAST_32_RANDOM_CHARACTERS',
         'demo_demo_demo_demo_demo_demo_demo_demo',
         'corto_pero_de_mas_de_16',
@@ -68,7 +68,7 @@ describe('Hardening: configuración, IDOR, dispositivos revocados e idempotencia
     it('1.5 DATABASE_URL con contraseña de ejemplo o publicada se rechaza en producción', () => {
       for (const url of [
         'postgresql://agro:CHANGE_ME@db:5432/agro',
-        'postgresql://agrocontrol_user:agrocontrol_secret_pass_2026@db:5432/agro',
+        'postgresql://agro:agrocontrol_secret_pass_variante@db:5432/agro',
         'postgresql://agro@db:5432/agro',
       ]) {
         expect(() =>
