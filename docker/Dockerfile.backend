@@ -1,9 +1,9 @@
 # ==============================================================================
-# AGROCONTROL PRO - DOCKERFILE BACKEND (Node.js 20 / NestJS)
+# AGROCONTROL PRO - DOCKERFILE BACKEND (Node.js 24 LTS / NestJS)
 # ==============================================================================
 
 # Etapa 1: Build de la aplicación
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY . .
 RUN npm run build
 
 # Etapa 2: Entorno de producción ligero
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm ci --only=production && npx prisma generate && npm cache clean --force
+RUN npm ci --omit=dev && npx prisma generate && npm cache clean --force
 
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 
