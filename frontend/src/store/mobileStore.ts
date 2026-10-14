@@ -294,7 +294,11 @@ export const useMobileStore = create<MobileState>((set, get) => {
 
     ejecutarPush: async () => {
       const { colaOperaciones, dispositivoId, codigoDispositivo } = get();
-      const pendientes = colaOperaciones.filter((op) => op.estado_local === 'PENDIENTE');
+      // La cola local guarda primero lo más reciente; se envía en orden cronológico
+      // para que, p. ej., un cliente creado offline llegue antes que sus ventas.
+      const pendientes = colaOperaciones
+        .filter((op) => op.estado_local === 'PENDIENTE')
+        .sort((a, b) => a.fecha_operacion.localeCompare(b.fecha_operacion));
 
       if (pendientes.length === 0) {
         return { enviadas: 0, aplicadas: 0, observadas: 0 };

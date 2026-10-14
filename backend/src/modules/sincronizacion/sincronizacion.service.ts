@@ -341,7 +341,7 @@ export class SincronizacionService {
   async sincronizacionPull(
     dto: SincronizacionPullDto,
     usuarioId: string,
-    usuarioRol: string,
+    _usuarioRol: string,
   ) {
     const fechaFiltro = dto.ultima_sincronizacion
       ? new Date(dto.ultima_sincronizacion)
@@ -534,6 +534,44 @@ export class SincronizacionService {
    * 2. Máquina de Estados: RECIBIDA -> APLICADA (si cuadra en bodega móvil) u OBSERVADA (si hay faltante).
    * 3. No interrupción: Un error en un item NO aborta el lote completo del vendedor.
    */
+  /**
+   * Ejecuta la escritura de una operación sincronizada. Si otra petición
+   * concurrente ya registró el mismo UUID (violación de unicidad P2002), la
+   * transacción se revierte sin efectos y se devuelve el registro existente
+   * para responder de forma idempotente en lugar de con un error 500.
+   */
+  private async escribirOperacionIdempotente(
+    operacionId: string,
+    escritura: () => Promise<unknown>,
+  ) {
+    try {
+      await escritura();
+      return null;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existente = await this.prisma.operacion_sincronizada.findUnique({
+          where: { id: operacionId },
+        });
+        if (existente) return existente;
+      }
+      throw error;
+    }
+  }
+
+  private resultadoReintento(
+    op: { id: string; tipo_operacion: string },
+    existente: { estado_sync: string; motivo_observacion: string | null },
+  ) {
+    return {
+      id: op.id,
+      tipo_operacion: op.tipo_operacion,
+      estado_sync: existente.estado_sync as 'APLICADA' | 'OBSERVADA',
+      motivo_observacion: existente.motivo_observacion,
+      ya_procesado: true,
+      mensaje: 'Operación previamente sincronizada. Reintento procesado de forma idempotente sin duplicidad.',
+    };
+  }
+
   async sincronizacionPush(
     dto: SincronizacionPushDto,
     usuarioId: string,
@@ -581,8 +619,16 @@ export class SincronizacionService {
       cliente_local_id?: string;
     }> = [];
 
+    // Los CLIENTE_NUEVO se procesan primero (orden estable para el resto): una venta
+    // offline puede referenciar por su ID local a un cliente creado en el mismo lote.
+    const operacionesOrdenadas = [...dto.operaciones].sort(
+      (a, b) =>
+        Number(b.tipo_operacion === 'CLIENTE_NUEVO') -
+        Number(a.tipo_operacion === 'CLIENTE_NUEVO'),
+    );
+
     // Procesamiento ordenado e individual de cada operación dentro del batch
-    for (const op of dto.operaciones) {
+    for (const op of operacionesOrdenadas) {
       // 1. REGLA ESTRICTA DE IDEMPOTENCIA (OBS-MOB-NEW-02):
       // Consulta PRIMERO si el UUID (operacion.id) ya existe en operacion_sincronizada.
       // Si YA EXISTE, responde inmediatamente con ya_procesado = true y su estado registrado,
@@ -593,14 +639,7 @@ export class SincronizacionService {
 
       if (opExistente) {
         totalReintentosIgnorados++;
-        resultados.push({
-          id: op.id,
-          tipo_operacion: op.tipo_operacion,
-          estado_sync: opExistente.estado_sync as 'APLICADA' | 'OBSERVADA',
-          motivo_observacion: opExistente.motivo_observacion,
-          ya_procesado: true,
-          mensaje: 'Operación previamente sincronizada. Reintento procesado de forma idempotente sin duplicidad.',
-        });
+        resultados.push(this.resultadoReintento(op, opExistente));
         continue;
       }
 
@@ -698,21 +737,28 @@ export class SincronizacionService {
 
         // Caso A: Venta OBSERVADA (Faltante físico o descalce)
         if (estadoCalculado === 'OBSERVADA') {
-          await this.prisma.operacion_sincronizada.create({
-            data: {
-              id: op.id,
-              dispositivo_id: dispositivoId,
-              usuario_id: usuarioId,
-              carga_distribucion_id: op.carga_distribucion_id || null,
-              tipo_operacion: 'VENTA',
-              estado_sync: 'OBSERVADA',
-              datos_operacion: op as any,
-              motivo_observacion: motivoObservacion,
-              fecha_operacion: fechaOperacionMovil,
-              fecha_registro: timestampServidor,
-              ip_origen: ipOrigen || null,
-            },
-          });
+          const previaObservada = await this.escribirOperacionIdempotente(op.id, () =>
+            this.prisma.operacion_sincronizada.create({
+              data: {
+                id: op.id,
+                dispositivo_id: dispositivoId,
+                usuario_id: usuarioId,
+                carga_distribucion_id: op.carga_distribucion_id || null,
+                tipo_operacion: 'VENTA',
+                estado_sync: 'OBSERVADA',
+                datos_operacion: op as any,
+                motivo_observacion: motivoObservacion,
+                fecha_operacion: fechaOperacionMovil,
+                fecha_registro: timestampServidor,
+                ip_origen: ipOrigen || null,
+              },
+            }),
+          );
+          if (previaObservada) {
+            totalReintentosIgnorados++;
+            resultados.push(this.resultadoReintento(op, previaObservada));
+            continue;
+          }
 
           await this.auditoriaService.registrarEvento({
             entidad: 'operacion_sincronizada',
@@ -739,54 +785,61 @@ export class SincronizacionService {
           });
         } else {
           // Caso B: Venta APLICADA (Atómica con descuento de bodega móvil y Kárdex)
-          await this.prisma.$transaction(async (tx) => {
-            // Guardar en bitácora de operaciones sincronizadas
-            await tx.operacion_sincronizada.create({
-              data: {
-                id: op.id,
-                dispositivo_id: dispositivoId,
-                usuario_id: usuarioId,
-                carga_distribucion_id: op.carga_distribucion_id,
-                tipo_operacion: 'VENTA',
-                estado_sync: 'APLICADA',
-                datos_operacion: op as any,
-                motivo_observacion: null,
-                fecha_operacion: fechaOperacionMovil,
-                fecha_registro: timestampServidor,
-                ip_origen: ipOrigen || null,
-              },
-            });
-
-            // Descontar inventario de bodega móvil y asentar Kárdex
-            const detalles = op.detalles || [];
-            for (const item of detalles) {
-              await tx.movimiento_kardex.create({
+          const previaAplicada = await this.escribirOperacionIdempotente(op.id, () =>
+            this.prisma.$transaction(async (tx) => {
+              // Guardar en bitácora de operaciones sincronizadas
+              await tx.operacion_sincronizada.create({
                 data: {
-                  id: randomUUID(),
-                  producto_id: item.producto_id,
-                  ubicacion_id: cargaAsociada.bodega_movil_id,
-                  tipo: 'VENTA_RUTA',
-                  cantidad_base: -item.cantidad,
-                  costo_unitario: item.precio_unitario || 0,
-                  documento_tipo: 'VENTA_MOVIL',
-                  documento_id: op.id,
-                  motivo: `Venta móvil sincronizada - Carga ${cargaAsociada.codigo}`,
-                  usuario_id: usuarioId,
+                  id: op.id,
                   dispositivo_id: dispositivoId,
+                  usuario_id: usuarioId,
+                  carga_distribucion_id: op.carga_distribucion_id,
+                  tipo_operacion: 'VENTA',
+                  estado_sync: 'APLICADA',
+                  datos_operacion: op as any,
+                  motivo_observacion: null,
                   fecha_operacion: fechaOperacionMovil,
                   fecha_registro: timestampServidor,
+                  ip_origen: ipOrigen || null,
                 },
               });
 
-              await tx.$executeRaw`
-                UPDATE stock_saldo
-                SET cantidad_fisica = cantidad_fisica - ${item.cantidad},
-                    actualizado_en = NOW()
-                WHERE producto_id = ${item.producto_id}::uuid
-                  AND ubicacion_id = ${cargaAsociada.bodega_movil_id}::uuid
-              `;
-            }
-          });
+              // Descontar inventario de bodega móvil y asentar Kárdex
+              const detalles = op.detalles || [];
+              for (const item of detalles) {
+                await tx.movimiento_kardex.create({
+                  data: {
+                    id: randomUUID(),
+                    producto_id: item.producto_id,
+                    ubicacion_id: cargaAsociada.bodega_movil_id,
+                    tipo: 'VENTA_RUTA',
+                    cantidad_base: -item.cantidad,
+                    costo_unitario: item.precio_unitario || 0,
+                    documento_tipo: 'VENTA_MOVIL',
+                    documento_id: op.id,
+                    motivo: `Venta móvil sincronizada - Carga ${cargaAsociada.codigo}`,
+                    usuario_id: usuarioId,
+                    dispositivo_id: dispositivoId,
+                    fecha_operacion: fechaOperacionMovil,
+                    fecha_registro: timestampServidor,
+                  },
+                });
+
+                await tx.$executeRaw`
+                  UPDATE stock_saldo
+                  SET cantidad_fisica = cantidad_fisica - ${item.cantidad},
+                      actualizado_en = NOW()
+                  WHERE producto_id = ${item.producto_id}::uuid
+                    AND ubicacion_id = ${cargaAsociada.bodega_movil_id}::uuid
+                `;
+              }
+            }),
+          );
+          if (previaAplicada) {
+            totalReintentosIgnorados++;
+            resultados.push(this.resultadoReintento(op, previaAplicada));
+            continue;
+          }
 
           totalAplicadas++;
           resultados.push({
@@ -834,24 +887,31 @@ export class SincronizacionService {
           });
         }
 
-        await this.prisma.operacion_sincronizada.create({
-          data: {
-            id: op.id,
-            dispositivo_id: dispositivoId,
-            usuario_id: usuarioId,
-            carga_distribucion_id: op.carga_distribucion_id || null,
-            tipo_operacion: 'CLIENTE_NUEVO',
-            estado_sync: 'APLICADA',
-            datos_operacion: {
-              ...datosCli,
-              cliente_id_servidor: clienteFinal.id,
+        const previaCliente = await this.escribirOperacionIdempotente(op.id, () =>
+          this.prisma.operacion_sincronizada.create({
+            data: {
+              id: op.id,
+              dispositivo_id: dispositivoId,
+              usuario_id: usuarioId,
+              carga_distribucion_id: op.carga_distribucion_id || null,
+              tipo_operacion: 'CLIENTE_NUEVO',
+              estado_sync: 'APLICADA',
+              datos_operacion: {
+                ...datosCli,
+                cliente_id_servidor: clienteFinal.id,
+              },
+              motivo_observacion: null,
+              fecha_operacion: fechaOperacionMovil,
+              fecha_registro: timestampServidor,
+              ip_origen: ipOrigen || null,
             },
-            motivo_observacion: null,
-            fecha_operacion: fechaOperacionMovil,
-            fecha_registro: timestampServidor,
-            ip_origen: ipOrigen || null,
-          },
-        });
+          }),
+        );
+        if (previaCliente) {
+          totalReintentosIgnorados++;
+          resultados.push(this.resultadoReintento(op, previaCliente));
+          continue;
+        }
 
         totalAplicadas++;
         resultados.push({
@@ -863,157 +923,115 @@ export class SincronizacionService {
           cliente_local_id: datosCli.cliente_local_id,
           mensaje: 'Cliente registrado o conciliado exitosamente.',
         });
-      } else if (op.tipo_operacion === 'DEVOLUCION') {
-        // Efecto colateral: reingresar al saldo de la bodega móvil y registrar en Kárdex
-        if (cargaAsociada && op.detalles && op.detalles.length > 0) {
-          for (const item of op.detalles) {
-            await this.prisma.stock_saldo.upsert({
-              where: {
-                producto_id_ubicacion_id: {
-                  producto_id: item.producto_id,
-                  ubicacion_id: cargaAsociada.bodega_movil_id,
-                },
-              },
-              update: {
-                cantidad_fisica: { increment: item.cantidad },
-                actualizado_en: timestampServidor,
-              },
-              create: {
-                producto_id: item.producto_id,
-                ubicacion_id: cargaAsociada.bodega_movil_id,
-                cantidad_fisica: item.cantidad,
-                cantidad_reservada: 0,
-              },
-            });
+      } else if (op.tipo_operacion === 'DEVOLUCION' || op.tipo_operacion === 'SOBRANTE') {
+        // Efecto colateral: ingreso positivo en la bodega móvil con su asiento de Kárdex.
+        // Registro de la operación, Kárdex y saldo en UNA transacción: si cualquier paso
+        // falla no queda saldo sin respaldo en Kárdex, y el reintento no lo duplica.
+        const esDevolucion = op.tipo_operacion === 'DEVOLUCION';
+        const tipoKardex = esDevolucion ? 'DEVOLUCION_RUTA' : 'SOBRANTE_RUTA';
+        const motivoKardex = esDevolucion
+          ? `Devolución en ruta aplicada a carga ${cargaAsociada?.codigo || ''}`
+          : `Sobrante reportado en ruta: ${op.observaciones || 'Ajuste operativo'}`;
 
-            await this.prisma.movimiento_kardex.create({
+        const previaAjuste = await this.escribirOperacionIdempotente(op.id, () =>
+          this.prisma.$transaction(async (tx) => {
+            await tx.operacion_sincronizada.create({
               data: {
-                id: randomUUID(),
-                producto_id: item.producto_id,
-                ubicacion_id: cargaAsociada.bodega_movil_id,
-                tipo: 'DEVOLUCION_RUTA',
-                cantidad_base: item.cantidad,
-                costo_unitario: item.precio_unitario || 0,
-                documento_tipo: 'DEVOLUCION_RUTA',
-                documento_id: op.id,
-                motivo: `Devolución en ruta aplicada a carga ${cargaAsociada.codigo || ''}`,
-                usuario_id: usuarioId,
+                id: op.id,
                 dispositivo_id: dispositivoId,
+                usuario_id: usuarioId,
+                carga_distribucion_id: op.carga_distribucion_id || null,
+                tipo_operacion: op.tipo_operacion,
+                estado_sync: 'APLICADA',
+                datos_operacion: op as any,
+                motivo_observacion: null,
                 fecha_operacion: fechaOperacionMovil,
                 fecha_registro: timestampServidor,
+                ip_origen: ipOrigen || null,
               },
             });
-          }
-        }
 
-        await this.prisma.operacion_sincronizada.create({
-          data: {
-            id: op.id,
-            dispositivo_id: dispositivoId,
-            usuario_id: usuarioId,
-            carga_distribucion_id: op.carga_distribucion_id || null,
-            tipo_operacion: 'DEVOLUCION',
-            estado_sync: 'APLICADA',
-            datos_operacion: op as any,
-            motivo_observacion: null,
-            fecha_operacion: fechaOperacionMovil,
-            fecha_registro: timestampServidor,
-            ip_origen: ipOrigen || null,
-          },
-        });
+            if (!cargaAsociada) return;
+            for (const item of op.detalles || []) {
+              await tx.movimiento_kardex.create({
+                data: {
+                  id: randomUUID(),
+                  producto_id: item.producto_id,
+                  ubicacion_id: cargaAsociada.bodega_movil_id,
+                  tipo: tipoKardex,
+                  cantidad_base: item.cantidad,
+                  costo_unitario: item.precio_unitario || 0,
+                  documento_tipo: tipoKardex,
+                  documento_id: op.id,
+                  motivo: motivoKardex,
+                  usuario_id: usuarioId,
+                  dispositivo_id: dispositivoId,
+                  fecha_operacion: fechaOperacionMovil,
+                  fecha_registro: timestampServidor,
+                },
+              });
+
+              await tx.stock_saldo.upsert({
+                where: {
+                  producto_id_ubicacion_id: {
+                    producto_id: item.producto_id,
+                    ubicacion_id: cargaAsociada.bodega_movil_id,
+                  },
+                },
+                update: {
+                  cantidad_fisica: { increment: item.cantidad },
+                  actualizado_en: timestampServidor,
+                },
+                create: {
+                  producto_id: item.producto_id,
+                  ubicacion_id: cargaAsociada.bodega_movil_id,
+                  cantidad_fisica: item.cantidad,
+                  cantidad_reservada: 0,
+                },
+              });
+            }
+          }),
+        );
+        if (previaAjuste) {
+          totalReintentosIgnorados++;
+          resultados.push(this.resultadoReintento(op, previaAjuste));
+          continue;
+        }
 
         totalAplicadas++;
         resultados.push({
           id: op.id,
-          tipo_operacion: 'DEVOLUCION',
+          tipo_operacion: op.tipo_operacion,
           estado_sync: 'APLICADA',
           ya_procesado: false,
-          mensaje: 'Devolución aplicada al stock y Kárdex de la bodega móvil.',
-        });
-      } else if (op.tipo_operacion === 'SOBRANTE') {
-        // Efecto colateral: ajuste positivo en la bodega móvil y Kárdex
-        if (cargaAsociada && op.detalles && op.detalles.length > 0) {
-          for (const item of op.detalles) {
-            await this.prisma.stock_saldo.upsert({
-              where: {
-                producto_id_ubicacion_id: {
-                  producto_id: item.producto_id,
-                  ubicacion_id: cargaAsociada.bodega_movil_id,
-                },
-              },
-              update: {
-                cantidad_fisica: { increment: item.cantidad },
-                actualizado_en: timestampServidor,
-              },
-              create: {
-                producto_id: item.producto_id,
-                ubicacion_id: cargaAsociada.bodega_movil_id,
-                cantidad_fisica: item.cantidad,
-                cantidad_reservada: 0,
-              },
-            });
-
-            await this.prisma.movimiento_kardex.create({
-              data: {
-                id: randomUUID(),
-                producto_id: item.producto_id,
-                ubicacion_id: cargaAsociada.bodega_movil_id,
-                tipo: 'SOBRANTE_RUTA',
-                cantidad_base: item.cantidad,
-                costo_unitario: item.precio_unitario || 0,
-                documento_tipo: 'SOBRANTE_RUTA',
-                documento_id: op.id,
-                motivo: `Sobrante reportado en ruta: ${op.observaciones || 'Ajuste operativo'}`,
-                usuario_id: usuarioId,
-                dispositivo_id: dispositivoId,
-                fecha_operacion: fechaOperacionMovil,
-                fecha_registro: timestampServidor,
-              },
-            });
-          }
-        }
-
-        await this.prisma.operacion_sincronizada.create({
-          data: {
-            id: op.id,
-            dispositivo_id: dispositivoId,
-            usuario_id: usuarioId,
-            carga_distribucion_id: op.carga_distribucion_id || null,
-            tipo_operacion: 'SOBRANTE',
-            estado_sync: 'APLICADA',
-            datos_operacion: op as any,
-            motivo_observacion: null,
-            fecha_operacion: fechaOperacionMovil,
-            fecha_registro: timestampServidor,
-            ip_origen: ipOrigen || null,
-          },
-        });
-
-        totalAplicadas++;
-        resultados.push({
-          id: op.id,
-          tipo_operacion: 'SOBRANTE',
-          estado_sync: 'APLICADA',
-          ya_procesado: false,
-          mensaje: 'Sobrante registrado con ajuste en el Kárdex de la bodega móvil.',
+          mensaje: esDevolucion
+            ? 'Devolución aplicada al stock y Kárdex de la bodega móvil.'
+            : 'Sobrante registrado con ajuste en el Kárdex de la bodega móvil.',
         });
       } else {
         // COBRO, PEDIDO u otras operaciones
-        await this.prisma.operacion_sincronizada.create({
-          data: {
-            id: op.id,
-            dispositivo_id: dispositivoId,
-            usuario_id: usuarioId,
-            carga_distribucion_id: op.carga_distribucion_id || null,
-            tipo_operacion: op.tipo_operacion,
-            estado_sync: 'APLICADA',
-            datos_operacion: op as any,
-            motivo_observacion: null,
-            fecha_operacion: fechaOperacionMovil,
-            fecha_registro: timestampServidor,
-            ip_origen: ipOrigen || null,
-          },
-        });
+        const previaOtra = await this.escribirOperacionIdempotente(op.id, () =>
+          this.prisma.operacion_sincronizada.create({
+            data: {
+              id: op.id,
+              dispositivo_id: dispositivoId,
+              usuario_id: usuarioId,
+              carga_distribucion_id: op.carga_distribucion_id || null,
+              tipo_operacion: op.tipo_operacion,
+              estado_sync: 'APLICADA',
+              datos_operacion: op as any,
+              motivo_observacion: null,
+              fecha_operacion: fechaOperacionMovil,
+              fecha_registro: timestampServidor,
+              ip_origen: ipOrigen || null,
+            },
+          }),
+        );
+        if (previaOtra) {
+          totalReintentosIgnorados++;
+          resultados.push(this.resultadoReintento(op, previaOtra));
+          continue;
+        }
 
         if (op.tipo_operacion === 'COBRO') {
           await this.auditoriaService.registrarEvento({
