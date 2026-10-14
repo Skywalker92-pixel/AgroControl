@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, ForbiddenException } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -57,7 +57,10 @@ async function bootstrap() {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`Acceso bloqueado por política CORS: origen '${origin}' no autorizado.`));
+        // 403 explícito (antes: Error genérico -> 500 con stack trace en el log).
+        callback(
+          new ForbiddenException(`Acceso bloqueado por política CORS: origen '${origin}' no autorizado.`),
+        );
       }
     },
     credentials: true,
