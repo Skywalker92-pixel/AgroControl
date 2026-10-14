@@ -1,6 +1,9 @@
 # ==============================================================================
 # AGROCONTROL PRO - .gitignore
 # ==============================================================================
+# Nota: gitignore NO admite comentarios al final de una línea; un "# ..." tras
+# un patrón pasa a formar parte del patrón y lo invalida. Comente siempre en
+# líneas propias.
 
 # ── Dependencias de paquetes ──────────────────────────────────────────────────
 node_modules/
@@ -9,19 +12,22 @@ node_modules/
 
 # ── Entornos y variables sensibles (NUNCA subir al repositorio) ───────────────
 .env
-.env.local
-.env.*.local
+.env.*
 *.env
-!*.env.example          # La plantilla SÍ se incluye
+# Las plantillas sin secretos sí se versionan
+!.env.example
+!*.env.example
 
-# ── Certificados y claves privadas ────────────────────────────────────────────
+# ── Certificados, claves privadas y credenciales ──────────────────────────────
 *.pem
 *.key
+*.crt
 *.cert
 *.p12
 *.pfx
 keystore.jks
-google-services.json    # Firebase / Play Store (si se agrega en el futuro)
+# Firebase / Play Store (si se agrega en el futuro)
+google-services.json
 
 # ── Compilación y artefactos de build ─────────────────────────────────────────
 dist/
@@ -29,11 +35,14 @@ build/
 .next/
 out/
 *.tsbuildinfo
-*.apk                   # APK generados de la app móvil
+# Paquetes generados de la app móvil
+*.apk
 *.aab
 
 # ── Base de datos local, volúmenes y respaldos ────────────────────────────────
-backups/                # Los backups viven fuera del repo (regla 3-2-1)
+# Los backups viven fuera del repositorio (regla 3-2-1)
+backups/
+*.backup
 *.dump
 *.sql.gz
 *.sql.gz.enc
@@ -42,7 +51,7 @@ pgdata/
 .postgres/
 database/data/
 
-# ── Documentación y Auditorías Confidenciales (Uso Interno / Privado) ─────────
+# ── Documentación y material interno / confidencial ───────────────────────────
 docs/
 SKILL/
 

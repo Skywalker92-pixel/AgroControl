@@ -1,202 +1,173 @@
-# AgroControl Pro™
-### *Plataforma Inteligente de Gestión Comercial, Logística en Ruta y Control de Inventarios para el Sector Agropecuario*
+# AgroControl Pro
 
-[![CI/CD Pipeline](https://github.com/Skywalker92-pixel/AgroControl/actions/workflows/ci.yml/badge.svg)](https://github.com/Skywalker92-pixel/AgroControl/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue.svg?style=flat-square)](https://github.com/Skywalker92-pixel/AgroControl)
-[![Architecture](https://img.shields.io/badge/architecture-Offline--First%20PWA%20%2B%20Modular%20API-emerald.svg?style=flat-square)](https://github.com/Skywalker92-pixel/AgroControl)
-[![Security](https://img.shields.io/badge/security-K%C3%A1rdex%20Inmutable%20%7C%20RBAC%20%7C%20AES--256-orange.svg?style=flat-square)](https://github.com/Skywalker92-pixel/AgroControl)
-[![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL%2015-336791.svg?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![NestJS](https://img.shields.io/badge/backend-NestJS%2010-ea2845.svg?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite-61dafb.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+Sistema de gestión de inventario, despacho y distribución en ruta para comercializadoras de insumos agrícolas, con módulo móvil *offline-first* para vendedores.
 
----
+[![CI](https://github.com/Skywalker92-pixel/AgroControl/actions/workflows/ci.yml/badge.svg)](https://github.com/Skywalker92-pixel/AgroControl/actions/workflows/ci.yml)
+![Versión](https://img.shields.io/badge/versión-1.0.0--rc1-blue.svg?style=flat-square)
+![Estado](https://img.shields.io/badge/estado-release%20candidate-orange.svg?style=flat-square)
 
-## 🌟 La Solución Definitiva para la Distribución Agropecuaria
-
-Las distribuidoras y comercializadoras de insumos agrícolas (fertilizantes, fitosanitarios, semillas y herramientas) enfrentan un desafío crítico: **sus vendedores y camiones de reparto operan en valles, fundos y zonas rurales con escasa o nula conectividad a internet**.
-
-Los métodos tradicionales con libretas de papel, hojas de cálculo desfasadas o sistemas dependientes de internet causan:
-- **Pérdidas de inventario y mermas no justificadas** en los vehículos de reparto.
-- **Descuadres en las liquidaciones** entre el stock cargado, lo vendido y el dinero recaudado.
-- **Retrasos de días** en facturación, cobranza y actualización del Kárdex.
-- **Vulnerabilidad a fraudes o duplicidad de transacciones** al consolidar información manual.
-
-**AgroControl Pro™** transforma esta realidad mediante una plataforma integral con tecnología **Offline-First de grado empresarial**. Su equipo de campo vende, cobra y emite comprobantes sin interrupciones en el punto más remoto; y al detectar señal, el motor de sincronización inteligente concilia inventario, tesorería y Kárdex de forma atómica, segura e instantánea.
+> **Estado:** `1.0.0-rc1` (Release Candidate). El sistema aún no ha completado la aceptación en un entorno productivo real.
 
 ---
 
-## 🚀 Innovaciones y Capacidades Clave
+## Qué incluye
+
+**Consola administrativa (PC del local comercial)**
+
+- **Catálogo:** productos con unidad base, presentaciones con factor de conversión (p. ej. unidad base `litro`, "Caja x12" = factor 12) y listas de precio. El stock se guarda siempre en unidad base; no se duplica inventario por presentación.
+- **Inventario y Kárdex:** ingresos, salidas, ajustes y traslados entre almacenes y zonas. El Kárdex es *append-only*: un trigger de PostgreSQL (`trg_no_update_delete_kardex`) rechaza `UPDATE` y `DELETE` sobre `movimiento_kardex`; las correcciones se registran como movimientos compensatorios o ajustes.
+- **Conciliación:** verificación de que `SUM(movimiento_kardex.cantidad_base) = stock_saldo.cantidad_fisica` por producto y ubicación (endpoint, reporte y consulta SQL en `database/queries_verificacion/`).
+- **Pedidos y despacho:** proformas con estados `BORRADOR → RESERVADO → PREPARADO → DESPACHADO` (o `ANULADO`), reserva de stock y orden de despacho imprimible.
+- **Distribución:** vehículos con bodega móvil, cargas por vendedor, liquidación al cierre de ruta y acta de liquidación.
+- **Terminales móviles:** registro, autorización, revocación y activación/desactivación de dispositivos, con auditoría de cada cambio.
+- **Operaciones observadas:** revisión y resolución por un administrador de ventas sincronizadas con inconsistencias (p. ej. faltante en bodega móvil).
+- **Reportes** de stock, movimientos, despachos, rutas e incidencias, con exportación CSV.
+- **Usuarios y auditoría:** gestión de usuarios y bitácora de eventos (usuario, acción, entidad, registro, fecha, IP, valor anterior/nuevo).
+
+**Módulo móvil (PWA, `/movil`)**
+
+- Instalable como PWA; *service worker* (Workbox) con precaché de la aplicación.
+- Datos locales en **IndexedDB** (catálogo, clientes, carga activa, cola de operaciones pendientes, metadatos), con migración automática desde `localStorage` heredado.
+- Una venta offline actualiza el stock local de la bodega móvil y encola la operación **en una única transacción IndexedDB**.
+- Sincronización PULL/PUSH **idempotente**: cada operación lleva un UUID generado en el dispositivo; reenviarla (incluso de forma concurrente) no vuelve a afectar el Kárdex.
+- Alta de clientes en ruta; las ventas posteriores conservan la relación con el cliente al sincronizar.
+
+### Roles
+
+| Rol | Alcance |
+|---|---|
+| `ADMINISTRADOR_PROPIETARIO` | Acceso completo, usuarios, dispositivos, resolución de operaciones observadas. |
+| `ADMINISTRADOR_SECUNDARIO` | Gestión operativa y administrativa. |
+| `OPERADOR_ALMACEN` | Inventario, movimientos y despacho; sin administración de usuarios ni dispositivos. |
+| `VENDEDOR` | Módulo móvil y proformas propias; solo opera sobre su carga y sus propias proformas. |
+
+La autorización se aplica en el **backend** (`JwtAuthGuard` + `RolesGuard` y reglas de propiedad en los servicios). Ocultar opciones en la interfaz es solo una ayuda de navegación.
+
+---
+
+## Arquitectura
 
 ```
-                               ┌────────────────────────────────────────────────────────┐
-                               │                 AGROCONTROL PRO ECOSYSTEM              │
-                               └───────────────────────────┬────────────────────────────┘
-                                                           │
-                      ┌────────────────────────────────────┴────────────────────────────────────┐
-                      ▼                                                                         ▼
-   ┌─────────────────────────────────────────┐                               ┌─────────────────────────────────────────┐
-   │       SEDE CENTRAL / ALMACÉN (PC)       │                               │       FUERZA DE VENTAS EN RUTA (MÓVIL)  │
-   ├─────────────────────────────────────────┤                               ├─────────────────────────────────────────┤
-   │ • Control Maestro de Inventario         │                               │ • Aplicación PWA Offline-First          │
-   │ • Kárdex Inmutable (PEPS/Promedio)      │                               │ • Catálogo con listas de precios        │
-   │ • Despacho y Armado de Cargas           │       SINCRONIZACIÓN          │ • Venta atómica sobre Bodega Móvil      │
-   │ • Liquidación Inteligente de Rutas      │◄═════════════════════════════►│ • Cobranzas multimetodo (Yape, Plin, etc)│
-   │ • Autorización de Terminales            │      BIDIRECCIONAL PUSH/PULL  │ • Registro rápido de nuevos clientes    │
-   │ • Auditoría y Detección de Faltantes    │    (Idempotente con UUIDs)    │ • Cola local transaccional (IndexedDB)  │
-   └─────────────────────────────────────────┘                               └─────────────────────────────────────────┘
+ PC del local (navegador)            Vendedor (PWA /movil)
+        │                                   │  IndexedDB + Service Worker
+        └──────────────┬────────────────────┘
+                       │ HTTPS · JSON · JWT
+            ┌──────────▼──────────┐
+            │  API NestJS (/api)  │  Helmet · CORS allowlist · rate limiting
+            └──────────┬──────────┘
+                       │ Prisma
+            ┌──────────▼──────────┐
+            │   PostgreSQL 15     │  Triggers de inmutabilidad del Kárdex
+            └─────────────────────┘
 ```
 
-### 1. 📱 Terminal Móvil de Ventas Offline-First (PWA)
-- **Operación Continua sin Conectividad:** Funciona como aplicación nativa instalable en smartphones y tablets Android mediante Service Workers y precaché Workbox.
-- **Persistencia Transaccional con IndexedDB (ACID):** Cada venta descuenta inmediatamente el stock de la *Bodega Móvil* local y se resguarda en una cola transaccional inmutable antes de cualquier envío de red.
-- **Motor de Sincronización Idempotente (Push/Pull):** Reintentos automáticos seguros que garantizan que una venta jamás se procese dos veces en el Kárdex, incluso ante desconexiones repentinas o aperturas tardías.
-- **Venta y Cobranza Ágil en Ruta:** Registro de pedidos por unidad base o presentación comercial (cajas, bidones, sacos), con múltiples formas de pago: Efectivo, Transferencia, Yape, Plin y Crédito.
-- **Alta Express de Clientes en Campo:** Registro rápido de clientes nuevos en ruta con validación inmediata de RUC o DNI.
+| Capa | Tecnología |
+|---|---|
+| Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 3, Zustand, TanStack Query, `idb`, `vite-plugin-pwa` |
+| Backend | NestJS 10, Node.js 24 LTS, Prisma 5, Passport JWT, Helmet, `@nestjs/throttler`, `class-validator` |
+| Base de datos | PostgreSQL 15 (migraciones SQL en `database/migrations/`) |
+| Infraestructura | Docker Compose (PostgreSQL, API, Nginx, servicio de backups) |
 
-### 2. 🛡️ Control de Inventario y Kárdex Inmutable de Grado Financiero
-- **Protección Anti-Tamper a Nivel de Base de Datos:** Triggers nativos en PostgreSQL bloquean cualquier intento de edición o eliminación directa sobre la tabla histórica de movimientos de Kárdex.
-- **Soporte Multialmacén y Bodegas Móviles:** Cada vehículo de distribución es modelado como un almacén móvil con stock en tiempo real.
-- **Conciliación Matemática Continua:** Algoritmo automatizado que verifica en milisegundos que la sumatoria histórica del Kárdex coincida al 100.000% con los saldos físicos en almacén.
-- **Valorización Flexible:** Soporte para costeo Promedio Ponderado y PEPS (Primeras Entradas, Primeras Salidas).
-
-### 3. 🚚 Logística de Despacho y Liquidación sin Fricciones
-- **Armado de Cargas con Bloqueo Pesimista:** Impide que dos operadores reserven o despachen el mismo lote de productos simultáneamente.
-- **Liquidación Automática de Rutas:** Al retornar el vehículo, el sistema cuadra en segundos:
-  - Total de productos despachados
-  - Unidades vendidas en campo
-  - Saldos devueltos al almacén
-  - Dinero en efectivo y comprobantes digitales recaudados
-  - Registro de diferencias y observaciones para auditoría gerencial
-
-### 4. 🔒 Seguridad Corporativa y Control de Dispositivos (Zero Trust)
-- **Emparejamiento Estricto de Terminales (Hardware Binding):** Solo los dispositivos autorizados mediante su identificador único (`X-Device-Id`) pueden sincronizar ventas.
-- **Control de Acceso Basado en Roles (RBAC):**
-  - **Administrador Propietario:** Acceso total, auditoría financiera, resolución de discrepancias y gobernanza del sistema.
-  - **Administrador Secundario:** Gestión operativa, despacho, catálogos y supervisión de rutas.
-  - **Operador de Almacén:** Preparación de pedidos, ingresos de mercadería, traslados y tomas de inventario.
-  - **Vendedor:** Terminal móvil restringido exclusivamente a su propia carga y ruta asignada.
-- **Hardening Web:** Cabeceras HTTP seguras mediante **Helmet**, rate limiting contra ataques de fuerza bruta (`@nestjs/throttler`) y aislamiento horizontal estricto (anti-IDOR).
-- **Copias de Seguridad Cifradas:** Backups programados comprimidos y protegidos con cifrado simétrico militar **AES-256-CBC con PBKDF2**.
+Valorización del Kárdex: **promedio ponderado** (existe una interfaz de estrategia para incorporar otros métodos; PEPS no está implementado).
 
 ---
 
-## 📊 Módulos del Sistema
+## Entornos
 
-| Módulo | Funcionalidades Principales | Perfiles de Usuario |
-|---|---|---|
-| **Catálogo y Tarifarios** | Maestro de productos fitosanitarios, semillas y fertilizantes. Presentaciones con factores de conversión. Listas de precios personalizadas por cliente. | Administrador, Operador |
-| **Almacenes y Kárdex** | Gestión de almacenes físicos, zonas de cuarentena y bodegas móviles. Kardex perpetuo inalterable. | Administrador, Operador |
-| **Despacho y Cargas** | Orden de carga por vehículo, verificación de cubicaje/peso, salida de almacén con doble asiento contable. | Operador, Administrador |
-| **Venta en Campo (Móvil)** | Catálogo offline, selección de clientes, venta táctil en 2 toques, cálculo de vuelto, cobranza digital. | Vendedor en Ruta |
-| **Liquidación y Cuadre** | Conciliación de dinero vs. mercadería al cierre de jornada. Emisión de acta de liquidación. | Administrador, Operador |
-| **Auditoría y Resolución** | Panel de operaciones observadas (faltantes físicos en ruta). Registro inmutable de eventos con IP y usuario. | Administrador Propietario |
-| **Reportes Gerenciales** | Exportación de reportes de ventas por ruta, rotación de productos, saldos y cobranzas en formatos CSV y Excel. | Gerencia, Administrador |
-| **Salud y Observabilidad** | Endpoint `/api/health` para monitor de infraestructura y `/api/health/details` con diagnóstico operacional protegido. | DevOps, Administrador |
+| Entorno | Uso | Base de datos | Usuarios |
+|---|---|---|---|
+| `development` | `npm run start:dev` / `npm run dev` | PostgreSQL local o Docker | Seeds ficticios opcionales |
+| `test` | CI y `npm run test:e2e` | PostgreSQL efímero | `001_seed_usuarios_demo.sql` (ficticio) |
+| `production-local` | Docker Compose en la PC/servidor del local | Volumen Docker | Administrador inicial vía bootstrap |
+| `production-cloud` | Vercel (frontend) + Render (API) + Supabase (PostgreSQL) | Supabase | Administrador inicial vía bootstrap |
 
----
+Con `NODE_ENV=production` la API **no arranca** si `JWT_SECRET`, la contraseña de `DATABASE_URL` o `BACKUP_ENCRYPTION_KEY` contienen valores de ejemplo, si `JWT_SECRET` tiene menos de 32 caracteres o si `CORS_ORIGINS` está vacío o contiene `*`.
 
-## 🛠️ Stack Tecnológico
+### Producción local (Docker Compose)
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                             FRONTEND WEB & PWA                           │
-│  React 18 · TypeScript · Vite · Tailwind CSS · Zustand · PWA Workbox · idb│
-└────────────────────────────────────┬─────────────────────────────────────┘
-                                     │ HTTPS / JSON REST API
-┌────────────────────────────────────▼─────────────────────────────────────┐
-│                             BACKEND SERVICES                             │
-│  NestJS 10 · Node.js 20 LTS · Prisma ORM · Passport JWT · Helmet · Throttler│
-└────────────────────────────────────┬─────────────────────────────────────┘
-                                     │ SQL / Pool Conexiones
-┌────────────────────────────────────▼─────────────────────────────────────┐
-│                           DATABASE & STORAGE                             │
-│      PostgreSQL 15 · Triggers Anti-Tamper · Volúmenes SSD · AES-256      │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-- **Frontend:** Single Page Application (SPA) ultra rápida construida con **React 18**, **TypeScript** y empaquetada con **Vite**. Diseño responsivo adaptable a pantallas de escritorio y teléfonos móviles rugerizados.
-- **Capa Offline:** **IndexedDB** gestionado con transacciones ACID locales y **Workbox Service Workers** para disponibilidad inmediata sin conexión.
-- **Backend API:** Arquitectura modular en **NestJS** orientada a mantenibilidad, validación estricta de esquemas DTO con `class-validator` y documentación de tipos integrada.
-- **Persistencia:** **PostgreSQL 15** con integridad referencial completa y triggers de consistencia contable.
-- **Infraestructura & Contenedores:** **Docker Compose** con Nginx reverse proxy, compresión Gzip y script automatizado de auto-inicialización con seeds de catálogo y usuarios.
-
----
-
-## ⚡ Puesta en Marcha Rápida (Entorno Local o Servidor)
-
-### Requisitos
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) o Docker Engine con Docker Compose v2 (Linux Ubuntu 22.04+).
-- Git instalado.
-
-### 1. Clonar el repositorio
 ```bash
 git clone https://github.com/Skywalker92-pixel/AgroControl.git
 cd AgroControl
-```
-
-### 2. Configurar el archivo de entorno
-```bash
 cp .env.example .env
+# Edite .env: DB_PASSWORD, DATABASE_URL, JWT_SECRET, BACKUP_ENCRYPTION_KEY,
+# CORS_ORIGINS (URL desde la que se abrirá la web), NODE_ENV=production
+# e INITIAL_ADMIN_PASSWORD (solo para el primer arranque).
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build
 ```
-> Configure sus contraseñas seguras para la base de datos (`DB_PASSWORD`), la clave secreta del token (`JWT_SECRET`) y la clave de cifrado de backups (`BACKUP_ENCRYPTION_KEY`).
 
-### 3. Levantar la infraestructura
+En el primer arranque PostgreSQL aplica las migraciones, carga datos base (ubicación inicial, categorías, listas de precio) y crea el administrador propietario indicado en `INITIAL_ADMIN_*`. **No se crean cuentas de demostración** salvo que se defina `ENABLE_DEMO_SEED=true`. Después del primer arranque elimine `INITIAL_ADMIN_PASSWORD` del `.env`.
+
+- Consola administrativa: `http://<host>:8080/login` (puerto `HOST_WEB_PORT`)
+- Módulo móvil: `http://<host>:8080/movil/login`
+- Health check: `http://<host>:8080/api/health`
+
+### Producción en la nube (Vercel + Render + Supabase)
+
+1. **Supabase:** en una base nueva ejecute `database/init_supabase_cloud.sql` (migraciones + datos base, sin usuarios). En una base existente aplique solo las migraciones nuevas (p. ej. `006_fase3_tipos_sync_y_kardex.sql`). Cree el administrador con `database/bootstrap/001_admin_inicial.sql`.
+2. **Render (API):** *Build command* `npm ci --include=dev && npm run build`, *start command* `npm run start:prod`. Variables: `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS=https://<su-frontend>.vercel.app`, `TRUST_PROXY=1`, `BACKUPS_CLOUD_MANAGED=true`.
+3. **Vercel (frontend):** raíz `frontend/`, variable `VITE_API_URL=https://<su-api>.onrender.com/api`.
+
+Los secretos se configuran en cada plataforma; ningún archivo del repositorio debe contenerlos.
+
+### Desarrollo local
+
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env up -d
-```
-> En el primer inicio, Docker inicializará la base de datos PostgreSQL, ejecutará las migraciones DDL y cargará el catálogo inicial con los perfiles maestros del sistema.
+# Backend (requiere PostgreSQL con migraciones y seeds aplicados)
+cd backend && npm ci && npm run start:dev
 
-### 4. Acceder al sistema
-- **Portal Web Administrativo:** `http://localhost`
-- **Módulo Móvil para Vendedores:** `http://localhost/movil`
-- **Healthcheck del Sistema:** `http://localhost/api/health`
+# Frontend (proxy /api -> http://localhost:3000)
+cd frontend && npm ci && npm run dev
+```
+
+Para mostrar accesos rápidos a las cuentas ficticias **solo en `npm run dev`**, defina en `frontend/.env.local`: `VITE_ENABLE_DEMO_ACCOUNTS=true` y `VITE_DEMO_PASSWORD=<contraseña del seed>`. Estos accesos no existen en `npm run build`.
 
 ---
 
-## 🧪 Calidad de Software Verificada
+## Datos de demostración
 
-El proyecto cuenta con una batería integral de pruebas automatizadas **End-to-End (E2E)** que se ejecutan contra una base de datos PostgreSQL real en cada integración:
+Los datos incluidos en seeds y ejemplos son ficticios y existen únicamente para pruebas y demostraciones. No representan clientes, trabajadores, vehículos ni operaciones reales.
+
+| Archivo | Contenido | ¿Producción? |
+|---|---|---|
+| `database/seeds/000_seed_base.sql` | Ubicación inicial, categorías, listas de precio | Sí |
+| `database/seeds/001_seed_usuarios_demo.sql` | Usuarios `demo.admin`, `demo.secundario`, `demo.almacen`, `demo.vendedor` con contraseña pública | **No** |
+| `database/seeds/002_seed_demo_comercial.sql` | Catálogo, clientes, vehículo `DEM-001`, terminal `DEMO-001`, stock y una carga en ruta | **No** |
+
+---
+
+## Calidad y pruebas
 
 ```bash
 cd backend
-npm run test:e2e
+npm run lint        # ESLint, 0 warnings permitidos
+npm run build
+npm run test:e2e    # requiere PostgreSQL con migraciones y seeds 000 + 001
+
+cd ../frontend
+npm run typecheck
+npm run build
 ```
 
-**Resultado de la suite de pruebas:**
-```text
-Test Suites: 12 passed, 12 total
-Tests:       140 passed, 140 total
-Snapshots:   0 total
-Time:        11.62 s
-Status:      PASS (Catálogo, Kárdex, Despacho, Distribución, Sincronización, Liquidación, Reportes, Health)
-```
+La batería E2E (13 suites, 158 pruebas) cubre autenticación y RBAC, catálogo, Kárdex (incluido el rechazo de `UPDATE`/`DELETE`), traslados, despacho, distribución, sincronización e idempotencia, conflictos de sincronización, liquidación, reportes, health y aislamiento entre vendedores.
 
-Adicionalmente, el pipeline de CI en **GitHub Actions** valida en cada commit:
-1. Análisis estático de código y reglas de calidad (`npm run lint`).
-2. Compilación estricta sin advertencias de TypeScript en Backend y Frontend.
-3. Generación del Service Worker y precaché de la PWA.
-4. Batería completa de 140 pruebas E2E.
+El pipeline de GitHub Actions (`.github/workflows/ci.yml`) ejecuta migraciones y seeds de prueba, `npm audit --omit=dev --audit-level=high` en backend y frontend, lint, build, E2E, typecheck y build de la PWA.
 
 ---
 
-## 💼 Casos de Éxito y Aplicabilidad Comercial
+## Seguridad
 
-AgroControl Pro está listo para operar en:
-- **Distribuidoras de Agroquímicos y Fertilizantes:** Control riguroso de sustancias de alto valor por lote y presentación.
-- **Empresas de Alimento Balanceado y Veterinaria:** Gestión de rutas de entrega a granjas, fundos y establos.
-- **Comercializadoras de Semillas y Riego:** Venta asistida por ingenieros agrónomos en campo con cotización y pedido in situ.
-- **Cualquier negocio de distribución B2B con reparto en ruta y cobro en campo.**
+- Kárdex *append-only* protegido mediante triggers de PostgreSQL.
+- RBAC validado en el servidor; reglas de propiedad para el rol `VENDEDOR` (proformas, cargas, liquidaciones, sincronización).
+- Terminales móviles autorizadas por un administrador; un dispositivo revocado o inactivo no puede sincronizar.
+- Sincronización idempotente por UUID de operación.
+- Helmet (CSP restrictiva en la API), CORS por *allowlist*, rate limiting en login y sincronización.
+- Backups `pg_dump` comprimidos y cifrados con AES-256-CBC (OpenSSL, PBKDF2); la clave no se versiona y el script falla si no está configurada.
+- `/api/health` público devuelve solo `status` y `timestamp`; el diagnóstico detallado (`/api/health/details`) requiere rol administrador.
 
----
-
-## 📩 Contacto y Soporte Empresarial
-
-¿Desea implementar **AgroControl Pro** en su empresa o solicitar una demostración personalizada?
-
-- **Sitio Web / Demo:** [Consultar Demostración](https://github.com/Skywalker92-pixel/AgroControl)
-- **Desarrollo y Consultoría:** Equipo de Ingeniería AgroControl Pro
-- **Licenciamiento:** Software con licenciamiento privado para empresas distribuidoras.
+Para reportar una vulnerabilidad consulte [`.github/SECURITY.md`](.github/SECURITY.md). Para contribuir, [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
-*© 2026 AgroControl Pro™. Todos los derechos reservados. Desarrollado con los más altos estándares de arquitectura de software, seguridad de datos y confiabilidad en campo.*
+## Licencia
+
+El paquete está marcado como `UNLICENSED`. **La decisión de licenciamiento está pendiente del propietario del repositorio**; mientras tanto no se concede ninguna licencia de uso, copia o distribución.
